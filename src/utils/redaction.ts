@@ -91,7 +91,8 @@ function isSensitiveKey(key: string, customPaths: string[]): boolean {
 	// Check custom paths (support dot notation like 'user.password')
 	return customPaths.some((path) => {
 		const parts = path.split(".")
-		return parts[parts.length - 1].toLowerCase() === lowerKey
+		const lastPart = parts[parts.length - 1]
+		return lastPart ? lastPart.toLowerCase() === lowerKey : false
 	})
 }
 

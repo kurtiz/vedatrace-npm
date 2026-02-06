@@ -5,7 +5,7 @@
 	"scripts": {
 		"setup": "rm -rf node_modules && npm i && git init && husky",
 		"prepublishOnly": "npm run build",
-		"build": "pkgroll --clean-dist && tsup",
+		"build": "pkgroll --clean-dist",
 		"test": "vitest",
 		"lint": "npx @biomejs/biome check --write"
 	},
@@ -83,20 +83,21 @@
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",
 		"@types/express": "^5.0.0",
-		"@types/react": "^19.0.0",
+		"@types/react": "^19.2.13",
 		"@vitest/coverage-v8": "^2.1.2",
 		"execa": "^9.4.0",
 		"husky": "^9.1.6",
 		"lint-staged": "^15.2.10",
 		"pkgroll": "^2.5.0",
+		"react": "^19.2.4",
 		"tsup": "^8.3.0",
 		"tsx": "^4.19.1",
 		"typescript": "^5.6.3",
 		"vitest": "^2.1.2"
 	},
 	"peerDependencies": {
-		"react": ">=16.8.0",
-		"express": ">=4.0.0"
+		"express": ">=4.0.0",
+		"react": ">=16.8.0"
 	},
 	"peerDependenciesMeta": {
 		"react": {

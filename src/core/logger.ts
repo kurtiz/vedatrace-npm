@@ -22,16 +22,11 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			"batchSize" | "flushInterval" | "maxRetries" | "retryDelay"
 		>
 	> &
-		Pick<
-			VedaTraceConfig,
-			| "service"
-			| "apiKey"
-			| "endpoint"
-			| "environment"
-			| "onError"
-			| "onSuccess"
-			| "debug"
-		>
+		Pick<VedaTraceConfig, "endpoint" | "onError" | "onSuccess" | "debug"> & {
+			service?: string
+			apiKey?: string
+			environment?: string
+		}
 	private childDefaults: LogMetadata
 
 	constructor(config: VedaTraceConfig = {}, childDefaults: LogMetadata = {}) {

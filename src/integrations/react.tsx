@@ -64,12 +64,11 @@ export function VedaTraceProvider({
 	const configRef = useRef(config)
 
 	const logger = useMemo(() => {
-		return vedatrace({
-			apiKey,
-			service,
-			environment,
-			...configRef.current,
-		})
+		const config: VedaTraceConfig = { ...configRef.current }
+		if (apiKey) config.apiKey = apiKey
+		if (service) config.service = service
+		if (environment) config.environment = environment
+		return vedatrace(config)
 	}, [apiKey, service, environment])
 
 	// Flush logs on unmount

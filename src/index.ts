@@ -35,6 +35,7 @@ import { VedaTraceLogger } from "./core/logger"
 import type { VedaTraceConfig, VedaTraceLoggerInterface } from "./core/types"
 import { VedaTraceConsoleTransport } from "./transports/console"
 import { VedaTraceHttpTransport } from "./transports/http"
+import type { HttpTransportConfig } from "./transports/http"
 
 /**
  * Create a VedaTrace logger instance
@@ -57,10 +58,9 @@ export function vedatrace(
 
 	// If API key provided and no custom transports, add HTTP transport
 	if (config.apiKey && (!config.transports || config.transports.length === 0)) {
-		const httpTransport = new VedaTraceHttpTransport({
-			apiKey: config.apiKey,
-			endpoint: config.endpoint,
-		})
+		const httpConfig: HttpTransportConfig = { apiKey: config.apiKey }
+		if (config.endpoint) httpConfig.endpoint = config.endpoint
+		const httpTransport = new VedaTraceHttpTransport(httpConfig)
 
 		const batcher = new VedaTraceBatcher(
 			[httpTransport],
