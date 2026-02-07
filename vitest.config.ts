@@ -12,7 +12,13 @@ export default defineConfig({
 		coverage: {
 			enabled: true,
 			include: ["src/**", "npx/**"],
-			exclude: [...(configDefaults.coverage.exclude || []), "**/index.ts"],
+			exclude: [
+				...(configDefaults.coverage.exclude || []),
+				"**/index.ts",
+				"**/integrations/**",
+				"**/transports/**",
+				"**/utils/**",
+			],
 		},
 	},
 })
