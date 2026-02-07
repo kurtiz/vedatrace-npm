@@ -55,7 +55,7 @@ const logger = devVedatrace({ service: 'my-service' })
 const logger = vedatrace({
   apiKey: 'your-api-key',           // Required for HTTP transport
   service: 'my-service',            // Default service name
-  endpoint: 'https://api.vedatrace.io/v1/logs',
+  endpoint: 'https://ingest.vedatrace.dev/v1/logs',
   environment: 'production',
   
   // Batching
