@@ -17,25 +17,24 @@ export type {
 	RedactionConfig,
 	InternalLogEntry,
 	BatcherConfig,
-} from "./core/types"
+} from "@/core/types"
 
-export { VedaTraceLogger } from "./core/logger"
-export { VedaTraceBatcher } from "./core/batcher"
-export { VedaTraceHttpTransport } from "./transports/http"
-export { VedaTraceConsoleTransport } from "./transports/console"
-export type { HttpTransportConfig } from "./transports/http"
+export { VedaTraceLogger } from "@/core/logger"
+export { VedaTraceBatcher } from "@/core/batcher"
+export { VedaTraceHttpTransport } from "@/transports/http"
+export { VedaTraceConsoleTransport } from "@/transports/console"
+export type { HttpTransportConfig } from "@/transports/http"
 export type {
 	ConsoleTransportConfig,
 	ConsoleFormat,
-} from "./transports/console"
-export { redact } from "./utils/redaction"
+} from "@/transports/console"
+export { redact } from "@/utils/redaction"
 
-import { VedaTraceBatcher } from "./core/batcher"
-import { VedaTraceLogger } from "./core/logger"
-import type { VedaTraceConfig, VedaTraceLoggerInterface } from "./core/types"
-import { VedaTraceConsoleTransport } from "./transports/console"
-import { VedaTraceHttpTransport } from "./transports/http"
-import type { HttpTransportConfig } from "./transports/http"
+import { VedaTraceBatcher } from "@/core/batcher"
+import { VedaTraceLogger } from "@/core/logger"
+import type { VedaTraceConfig, VedaTraceLoggerInterface } from "@/core/types"
+import type { HttpTransportConfig } from "@/transports"
+import { VedaTraceConsoleTransport, VedaTraceHttpTransport } from "@/transports"
 
 /**
  * Create a VedaTrace logger instance
