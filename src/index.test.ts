@@ -2,11 +2,11 @@
  * Tests for VedaTrace core functionality
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { VedaTraceBatcher } from "../src/core/batcher"
-import { VedaTraceLogger } from "../src/core/logger"
-import type { VedaTraceLog, VedaTraceTransport } from "../src/core/types"
-import { vedatrace } from "../src/index"
+import { describe, expect, it, vi } from "vitest"
+import { VedaTraceBatcher } from "@/core/batcher"
+import { VedaTraceLogger } from "@/core/logger"
+import type { VedaTraceLog, VedaTraceTransport } from "@/core/types"
+import { vedatrace } from "@/index"
 
 describe("VedaTrace SDK", () => {
 	describe("vedatrace factory", () => {
@@ -74,6 +74,7 @@ describe("VedaTrace SDK", () => {
 			const logs: VedaTraceLog[] = []
 			const transport: VedaTraceTransport = {
 				name: "test",
+				// @ts-expect-error
 				send: (l) => logs.push(...l),
 			}
 
@@ -94,7 +95,9 @@ describe("VedaTrace SDK", () => {
 			await logger.flush()
 
 			expect(logs.length).toBe(2)
+			// @ts-expect-error
 			expect(logs[0].service).toBe("default-service")
+			// @ts-expect-error
 			expect(logs[1].service).toBe("custom-service")
 		})
 	})
@@ -129,6 +132,7 @@ describe("VedaTrace SDK", () => {
 			await new Promise((resolve) => setTimeout(resolve, 10))
 
 			expect(sentLogs.length).toBe(1)
+			// @ts-expect-error
 			expect(sentLogs[0].length).toBe(3)
 		})
 

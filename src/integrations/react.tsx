@@ -1,8 +1,6 @@
 /**
  * React integration for VedaTrace
  * Provides context and hooks for client-side logging
- *
- * @jsx React.createElement
  */
 
 import type { ReactElement, ReactNode } from "react"

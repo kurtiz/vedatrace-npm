@@ -6,12 +6,16 @@
 		"setup": "rm -rf node_modules && npm i && git init && husky",
 		"prepublishOnly": "npm run build",
 		"build": "pkgroll --clean-dist",
-		"test": "vitest",
+		"test": "vitest --run",
 		"lint": "npx @biomejs/biome check --write"
 	},
-	"files": ["dist"],
+	"files": [
+		"dist"
+	],
 	"lint-staged": {
-		"*.{ts,tsx}": ["npm run lint"]
+		"*.{ts,tsx}": [
+			"npm run lint"
+		]
 	},
 	"type": "module",
 	"main": "./dist/index.cjs",
