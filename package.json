@@ -1,7 +1,7 @@
 {
 	"name": "vedatrace",
 	"description": "Universal JavaScript logging SDK for VedaTrace - type-safe, lightweight, and developer-friendly",
-	"version": "1.0.0",
+	"version": "0.1.0",
 	"scripts": {
 		"setup": "rm -rf node_modules && npm i && git init && husky",
 		"prepublishOnly": "npm run build",
@@ -81,22 +81,22 @@
 		"serverless"
 	],
 	"devDependencies": {
-		"@biomejs/biome": "^1.9.4",
-		"@types/express": "^5.0.0",
+		"@biomejs/biome": "^2.3.14",
+		"@types/express": "^5.0.6",
 		"@types/react": "^19.2.13",
-		"@vitest/coverage-v8": "^2.1.2",
-		"execa": "^9.4.0",
-		"husky": "^9.1.6",
-		"lint-staged": "^15.2.10",
-		"pkgroll": "^2.5.0",
+		"@vitest/coverage-v8": "^4.0.18",
+		"execa": "^9.6.1",
+		"husky": "^9.1.7",
+		"lint-staged": "^16.2.7",
+		"pkgroll": "^2.23.0",
 		"react": "^19.2.4",
-		"tsup": "^8.3.0",
-		"tsx": "^4.19.1",
-		"typescript": "^5.6.3",
-		"vitest": "^2.1.2"
+		"tsup": "^8.5.1",
+		"tsx": "^4.21.0",
+		"typescript": "^5.9.3",
+		"vitest": "^4.0.18"
 	},
 	"peerDependencies": {
-		"express": ">=4.0.0",
+		"express": "latest",
 		"react": ">=16.8.0"
 	},
 	"peerDependenciesMeta": {
