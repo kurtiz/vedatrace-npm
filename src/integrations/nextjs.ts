@@ -7,8 +7,8 @@ import type {
 	LogMetadata,
 	VedaTraceConfig,
 	VedaTraceLoggerInterface,
-} from "../core/types"
-import { vedatrace } from "../index"
+} from "@/core/types"
+import { vedatrace } from "@/index"
 
 export interface NextJsConfig extends VedaTraceConfig {
 	/** Generate request ID */
