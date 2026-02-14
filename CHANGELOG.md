@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.4
+
+### Patch Changes
+
+- 9f9a3b8: rety CI/CD with OIDC
+
 ## 0.1.3
 
 ### Patch Changes
