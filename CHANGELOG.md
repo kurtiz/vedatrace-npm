@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.3
+
+### Patch Changes
+
+- 03cb1b9: added an environment to the CI/CD to enable the OIDC authentication
+
 ## 0.1.2
 
 ### Patch Changes
