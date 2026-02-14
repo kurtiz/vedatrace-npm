@@ -1,5 +1,15 @@
-name: all-pull-request
-on: [push]
+name: CI
+on:
+  pull_request:
+    branches:
+      - main
+      - beta
+      - alpha
+  push:
+    branches-ignore:
+      - main
+      - beta
+      - alpha
 jobs:
   build_test:
     runs-on: ubuntu-latest

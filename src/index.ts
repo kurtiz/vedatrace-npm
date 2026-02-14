@@ -7,27 +7,27 @@
  * import { vedaTraceMiddleware } from 'vedatrace/express'
  */
 
-export type {
-	VedaTraceConfig,
-	VedaTraceLog,
-	VedaTraceLevel,
-	VedaTraceTransport,
-	VedaTraceLoggerInterface,
-	LogMetadata,
-	RedactionConfig,
-	InternalLogEntry,
-	BatcherConfig,
-} from "@/core/types"
+export { VedaTraceBatcher } from "@/core/batcher"
 
 export { VedaTraceLogger } from "@/core/logger"
-export { VedaTraceBatcher } from "@/core/batcher"
-export { VedaTraceHttpTransport } from "@/transports/http"
+export type {
+	BatcherConfig,
+	InternalLogEntry,
+	LogMetadata,
+	RedactionConfig,
+	VedaTraceConfig,
+	VedaTraceLevel,
+	VedaTraceLog,
+	VedaTraceLoggerInterface,
+	VedaTraceTransport,
+} from "@/core/types"
+export type {
+	ConsoleFormat,
+	ConsoleTransportConfig,
+} from "@/transports/console"
 export { VedaTraceConsoleTransport } from "@/transports/console"
 export type { HttpTransportConfig } from "@/transports/http"
-export type {
-	ConsoleTransportConfig,
-	ConsoleFormat,
-} from "@/transports/console"
+export { VedaTraceHttpTransport } from "@/transports/http"
 export { redact } from "@/utils/redaction"
 
 import { VedaTraceBatcher } from "@/core/batcher"

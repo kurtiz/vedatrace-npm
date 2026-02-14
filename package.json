@@ -7,7 +7,12 @@
 		"prepublishOnly": "npm run build",
 		"build": "pkgroll --clean-dist",
 		"test": "vitest --run",
-		"lint": "npx @biomejs/biome check --write"
+		"lint": "npx @biomejs/biome check --write",
+		"changeset": "changeset",
+		"version": "changeset version",
+		"release": "bun run build && changeset publish",
+		"ci:version": "changeset version",
+		"ci:publish": "bun run build && changeset publish"
 	},
 	"files": [
 		"dist"
@@ -86,6 +91,7 @@
 	],
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.14",
+		"@changesets/cli": "^2.29.8",
 		"@vitest/coverage-v8": "^4.0.18",
 		"execa": "^9.6.1",
 		"husky": "^9.1.7",

@@ -2,7 +2,7 @@
  * Transports for VedaTrace SDK
  */
 
-export { VedaTraceHttpTransport } from "./http"
+export type { ConsoleFormat, ConsoleTransportConfig } from "./console"
 export { VedaTraceConsoleTransport } from "./console"
 export type { HttpTransportConfig } from "./http"
-export type { ConsoleTransportConfig, ConsoleFormat } from "./console"
+export { VedaTraceHttpTransport } from "./http"
