@@ -18,6 +18,7 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # This MUST match the environment name in your npm Trusted Publisher settings
     environment: release
     steps:
       - name: Checkout Repo
@@ -34,7 +35,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
+          # We remove registry-url here to let OIDC handle the auth flow naturally
 
       - name: Install Dependencies
         run: bun install
@@ -46,7 +47,6 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
-          # We use bun to run the command, but the command now has the --provenance flag
           publish: bun run ci:publish
           version: bun run ci:version
           commit: "chore(release): version packages"
@@ -54,4 +54,6 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # These flags force npm (called by changesets) to use the OIDC provenance flow
           NPM_CONFIG_PROVENANCE: true
+          npm_config_provenance: true
