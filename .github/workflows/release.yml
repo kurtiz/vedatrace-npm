@@ -56,4 +56,3 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # These flags force npm (called by changesets) to use the OIDC provenance flow
           NPM_CONFIG_PROVENANCE: true
-          npm_config_provenance: true
