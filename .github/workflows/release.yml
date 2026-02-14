@@ -46,6 +46,7 @@ jobs:
         id: changesets
         uses: changesets/action@v1
         with:
+          # We use bun to run the command, but the command now has the --provenance flag
           publish: bun run ci:publish
           version: bun run ci:version
           commit: "chore(release): version packages"

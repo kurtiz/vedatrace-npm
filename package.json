@@ -12,7 +12,7 @@
     "version": "changeset version",
     "release": "bun run build && changeset publish",
     "ci:version": "changeset version",
-    "ci:publish": "bun run build && changeset publish"
+    "ci:publish": "bun run build && changeset publish --provenance"
   },
   "publishConfig": {
     "provenance": true,
