@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.5
+
+### Patch Changes
+
+- 7d60ece: fixed log hangs and minor bugs
+
 ## 0.1.4
 
 ### Patch Changes
