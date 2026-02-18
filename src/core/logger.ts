@@ -22,7 +22,10 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			"batchSize" | "flushInterval" | "maxRetries" | "retryDelay"
 		>
 	> &
-		Pick<VedaTraceConfig, "endpoint" | "onError" | "onSuccess" | "debug"> & {
+		Pick<
+			VedaTraceConfig,
+			"endpoint" | "onError" | "onSuccess" | "debug" | "immediateFlush"
+		> & {
 			service?: string
 			apiKey?: string
 			environment?: string
@@ -43,6 +46,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			onError: config.onError,
 			onSuccess: config.onSuccess,
 			debug: config.debug ?? false,
+			immediateFlush: config.immediateFlush ?? false,
 		}
 
 		// Initialize batcher if not disabled
@@ -72,6 +76,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 				},
 				this.config.onError,
 				this.config.onSuccess,
+				this.config.immediateFlush,
 			)
 		}
 	}
@@ -177,6 +182,13 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 	async flush(): Promise<void> {
 		if (this.batcher) {
 			await this.batcher.flush()
+		}
+	}
+
+	/** Stop the batcher and flush timer */
+	stop(): void {
+		if (this.batcher) {
+			this.batcher.stop()
 		}
 	}
 

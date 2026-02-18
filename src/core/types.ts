@@ -50,6 +50,8 @@ export interface VedaTraceConfig {
 	disabled?: boolean
 	/** Enable debug mode (verbose console output) */
 	debug?: boolean
+	/** Flush immediately after each log (for console/dev mode) */
+	immediateFlush?: boolean
 }
 
 /** Redaction configuration */
@@ -104,6 +106,7 @@ export interface BatcherConfig {
 	flushInterval: number
 	maxRetries: number
 	retryDelay: number
+	unrefTimer?: boolean
 }
 
 /** Logger interface */
@@ -115,4 +118,5 @@ export interface VedaTraceLoggerInterface {
 	fatal(message: string | Error, metadata?: LogMetadata): void
 	child(defaults: LogMetadata): VedaTraceLoggerInterface
 	flush(): Promise<void>
+	stop(): void
 }

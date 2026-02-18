@@ -223,6 +223,22 @@ app.post('/webhook', async (req, res) => {
 })
 ```
 
+### Graceful Shutdown
+
+The SDK uses background batching that doesn't block your app. For short-lived scripts or when you need explicit cleanup:
+
+```typescript
+const logger = vedatrace({ apiKey: '...' })
+
+logger.info('Processing...')
+
+// For short-lived scripts
+await logger.flush()
+logger.stop()  // Stop background timer
+```
+
+The SDK timer uses `unref()` so the process will exit automatically when there's nothing else to do. Call `stop()` if you need explicit cleanup.
+
 ### Error Handling
 
 ```typescript
@@ -287,6 +303,10 @@ Create a child logger with default metadata.
 ### `logger.flush()`
 
 Manually flush pending logs. Returns a Promise.
+
+### `logger.stop()`
+
+Stop the background flush timer. Call this for explicit cleanup in long-running processes or before shutdown.
 
 ## License
 

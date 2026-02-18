@@ -65,7 +65,7 @@ export function vedatrace(
 			[httpTransport],
 			{
 				batchSize: config.batchSize ?? 100,
-				flushInterval: config.flushInterval ?? 5000,
+				flushInterval: config.flushInterval ?? 1000,
 				maxRetries: config.maxRetries ?? 3,
 				retryDelay: config.retryDelay ?? 1000,
 			},
@@ -74,6 +74,15 @@ export function vedatrace(
 		)
 
 		logger.setBatcher(batcher)
+
+		if (typeof process !== "undefined") {
+			const flushLogs = async (): Promise<void> => {
+				await batcher.flush()
+			}
+			process.on("beforeExit", flushLogs)
+			process.on("SIGTERM", flushLogs)
+			process.on("SIGINT", flushLogs)
+		}
 	}
 
 	return logger
@@ -92,6 +101,7 @@ export function devVedatrace(
 ): VedaTraceLoggerInterface {
 	return vedatrace({
 		...config,
+		immediateFlush: true,
 		transports: [
 			new VedaTraceConsoleTransport({
 				format: "pretty",

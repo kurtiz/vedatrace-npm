@@ -19,7 +19,8 @@ export class VedaTraceBatcher {
 		private transports: VedaTraceTransport[],
 		private config: BatcherConfig,
 		private onError?: (error: Error) => void,
-		private onSuccess?: () => void,
+		private onSuccess?: (() => void) | undefined,
+		private immediateFlush = false,
 	) {
 		this.startFlushTimer()
 	}
@@ -28,7 +29,7 @@ export class VedaTraceBatcher {
 	add(log: InternalLogEntry): void {
 		this.queue.push(log)
 
-		if (this.queue.length >= this.config.batchSize) {
+		if (this.immediateFlush || this.queue.length >= this.config.batchSize) {
 			this.flush()
 		}
 	}
@@ -102,6 +103,10 @@ export class VedaTraceBatcher {
 				this.flush()
 			}
 		}, this.config.flushInterval)
+
+		if (this.config.unrefTimer !== false) {
+			this.flushTimer.unref()
+		}
 	}
 
 	/** Stop the flush timer */
