@@ -2,7 +2,7 @@
  * HTTP transport for sending logs to VedaTrace ingestion endpoint
  */
 
-import type { VedaTraceLog, VedaTraceTransport } from "../core/types"
+import type { InternalLogEntry, VedaTraceTransport } from "../core/types"
 
 export interface HttpTransportConfig {
 	/** API key for authentication */
@@ -30,9 +30,19 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 	}
 
 	/** Send logs via HTTP POST */
-	async send(logs: VedaTraceLog[]): Promise<void> {
+	async send(logs: InternalLogEntry[]): Promise<void> {
 		const controller = new AbortController()
 		const timeoutId = setTimeout(() => controller.abort(), this.timeout)
+
+		const payload = logs.map((log) => ({
+			level: log.level,
+			message: log.message,
+			service: log.service,
+			timestamp: log.timestamp
+				? new Date(log.timestamp).toISOString()
+				: undefined,
+			metadata: log.metadata,
+		}))
 
 		try {
 			const response = await fetch(this.endpoint, {
@@ -42,7 +52,7 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 					"X-API-Key": this.apiKey,
 					...this.headers,
 				},
-				body: JSON.stringify(logs),
+				body: JSON.stringify(payload),
 				signal: controller.signal,
 			})
 

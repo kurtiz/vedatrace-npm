@@ -69,7 +69,7 @@ export interface VedaTraceTransport {
 	/** Transport name */
 	name: string
 	/** Send logs to destination */
-	send(logs: VedaTraceLog[]): Promise<void> | void
+	send(logs: InternalLogEntry[]): Promise<void> | void
 	/** Flush any pending logs */
 	flush?(): Promise<void>
 }

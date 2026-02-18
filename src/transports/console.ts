@@ -3,8 +3,8 @@
  */
 
 import type {
+	InternalLogEntry,
 	VedaTraceLevel,
-	VedaTraceLog,
 	VedaTraceTransport,
 } from "../core/types"
 
@@ -50,7 +50,7 @@ export class VedaTraceConsoleTransport implements VedaTraceTransport {
 	}
 
 	/** Send logs to console */
-	send(logs: VedaTraceLog[]): void {
+	send(logs: InternalLogEntry[]): void {
 		for (const log of logs) {
 			if (LEVEL_PRIORITY[log.level] < LEVEL_PRIORITY[this.minLevel]) {
 				continue
@@ -71,13 +71,13 @@ export class VedaTraceConsoleTransport implements VedaTraceTransport {
 	}
 
 	/** Format as JSON */
-	private logJson(log: VedaTraceLog): void {
+	private logJson(log: InternalLogEntry): void {
 		// eslint-disable-next-line no-console
 		console.log(JSON.stringify(log))
 	}
 
 	/** Format as simple text */
-	private logSimple(log: VedaTraceLog): void {
+	private logSimple(log: InternalLogEntry): void {
 		const timestamp = new Date(log.timestamp ?? Date.now()).toISOString()
 		const service = log.service ? `[${log.service}] ` : ""
 		// eslint-disable-next-line no-console
@@ -87,7 +87,7 @@ export class VedaTraceConsoleTransport implements VedaTraceTransport {
 	}
 
 	/** Format as pretty colored output */
-	private logPretty(log: VedaTraceLog): void {
+	private logPretty(log: InternalLogEntry): void {
 		const timestamp = new Date(log.timestamp ?? Date.now()).toISOString()
 		const color = this.colors ? LEVEL_COLORS[log.level] : ""
 		const reset = this.colors ? RESET_COLOR : ""
