@@ -37,7 +37,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		this.config = {
 			service: config.service,
 			apiKey: config.apiKey,
-			endpoint: config.endpoint ?? "https://api.vedatrace.io/v1/logs",
+			endpoint: config.endpoint ?? "https://ingest.vedatrace.dev/v1/logs",
 			environment: config.environment,
 			batchSize: config.batchSize ?? 100,
 			flushInterval: config.flushInterval ?? 5000,

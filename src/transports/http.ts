@@ -24,7 +24,7 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 
 	constructor(config: HttpTransportConfig) {
 		this.apiKey = config.apiKey
-		this.endpoint = config.endpoint ?? "https://api.vedatrace.io/v1/logs"
+		this.endpoint = config.endpoint ?? "https://ingest.vedatrace.dev/v1/logs"
 		this.timeout = config.timeout ?? 30000
 		this.headers = config.headers ?? {}
 	}
