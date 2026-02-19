@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.6
+
+### Patch Changes
+
+- 5979e38: update ingestion endpoint
+
 ## 0.1.5
 
 ### Patch Changes
