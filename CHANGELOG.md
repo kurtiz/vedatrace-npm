@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.7
+
+### Patch Changes
+
+- 8cb03a6: Fix unref timer function that crashes in non-node environment like edge/browser
+
 ## 0.1.6
 
 ### Patch Changes
