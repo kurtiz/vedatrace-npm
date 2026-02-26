@@ -104,7 +104,7 @@ export class VedaTraceBatcher {
 			}
 		}, this.config.flushInterval)
 
-		if (this.config.unrefTimer !== false) {
+		if (this.config.unrefTimer === true) {
 			this.flushTimer.unref()
 		}
 	}

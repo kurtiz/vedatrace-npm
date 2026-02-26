@@ -52,6 +52,8 @@ export interface VedaTraceConfig {
 	debug?: boolean
 	/** Flush immediately after each log (for console/dev mode) */
 	immediateFlush?: boolean
+	/** Unref the flush timer (Node.js only, default: false) */
+	unrefTimer?: boolean
 }
 
 /** Redaction configuration */

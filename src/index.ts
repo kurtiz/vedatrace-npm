@@ -68,6 +68,7 @@ export function vedatrace(
 				flushInterval: config.flushInterval ?? 1000,
 				maxRetries: config.maxRetries ?? 3,
 				retryDelay: config.retryDelay ?? 1000,
+				unrefTimer: config.unrefTimer,
 			},
 			config.onError,
 			config.onSuccess,
