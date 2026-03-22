@@ -6,6 +6,13 @@
 
 - 8cb03a6: Fix unref timer function that crashes in non-node environment like edge/browser
 
+## 0.1.7
+
+### Patch Changes
+
+- Fix unhandled promise rejection in batcher that crashes Cloudflare Workers when HTTP transport fails and no onError handler is set. Errors now fall back to console.error instead of being silently dropped.
+- 8cb03a6: Fix unref timer function that crashes in non-node environment like edge/browser
+
 ## 0.1.6
 
 ### Patch Changes

@@ -84,7 +84,12 @@ export class VedaTraceBatcher {
 			const combinedError = new Error(
 				`Failed to send logs after ${this.config.maxRetries} retries: ${errors.map((e) => e.message).join(", ")}`,
 			)
-			this.onError?.(combinedError)
+			if (this.onError) {
+				this.onError(combinedError)
+			} else {
+				// Prevent unhandled rejection in runtimes like Cloudflare Workers
+				console.error("[VedaTrace]", combinedError.message)
+			}
 			return
 		}
 
@@ -100,7 +105,18 @@ export class VedaTraceBatcher {
 
 		this.flushTimer = setInterval(() => {
 			if (this.queue.length > 0) {
-				this.flush()
+				this.flush().catch((error) => {
+					if (this.onError) {
+						this.onError(
+							error instanceof Error ? error : new Error(String(error)),
+						)
+					} else {
+						console.error(
+							"[VedaTrace] Flush error:",
+							error instanceof Error ? error.message : String(error),
+						)
+					}
+				})
 			}
 		}, this.config.flushInterval)
 
