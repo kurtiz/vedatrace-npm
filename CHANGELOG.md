@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.8
+
+### Patch Changes
+
+- 6b21e83: fix batcher on error catches
+
 ## 0.1.7
 
 ### Patch Changes
