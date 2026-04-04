@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.1.9
+
+### Patch Changes
+
+- 72ecb71: fixed runtime issue on start up and flusher
+
 ## 0.1.8
 
 ### Patch Changes
