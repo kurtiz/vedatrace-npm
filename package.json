@@ -1,7 +1,7 @@
 {
   "name": "vedatrace",
   "description": "Universal JavaScript logging SDK for VedaTrace - type-safe, lightweight, and developer-friendly",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "scripts": {
     "setup": "rm -rf node_modules && npm i && git init && husky",
     "prepublishOnly": "npm run build",
