@@ -21,7 +21,7 @@ export class VedaTraceBatcher {
 		private onError?: (error: Error) => void,
 		private onSuccess?: (() => void) | undefined,
 		private immediateFlush = false,
-		autoStart = true,
+		autoStart = false,
 	) {
 		if (autoStart && !immediateFlush) {
 			this.startFlushTimer()
