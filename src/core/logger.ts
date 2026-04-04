@@ -2,13 +2,14 @@
  * Core VedaTrace Logger implementation
  */
 
+import { detectRuntime } from "../utils/runtime"
 import { VedaTraceBatcher } from "./batcher"
 import type {
 	InternalLogEntry,
 	LogMetadata,
+	RuntimeType,
 	VedaTraceConfig,
 	VedaTraceLevel,
-	VedaTraceLog,
 	VedaTraceLoggerInterface,
 } from "./types"
 
@@ -16,6 +17,7 @@ const SDK_VERSION = "1.0.0"
 
 export class VedaTraceLogger implements VedaTraceLoggerInterface {
 	private batcher: VedaTraceBatcher | null = null
+	public runtime: RuntimeType
 	private config: Required<
 		Pick<
 			VedaTraceConfig,
@@ -38,6 +40,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 	private childDefaults: LogMetadata
 
 	constructor(config: VedaTraceConfig = {}, childDefaults: LogMetadata = {}) {
+		this.runtime = config.runtime ?? detectRuntime()
 		this.childDefaults = childDefaults
 		this.config = {
 			service: config.service,
@@ -199,7 +202,14 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		}
 	}
 
-	/** Detect runtime environment */
+	/** Start the flush timer (for manual control in edge runtimes) */
+	start(): void {
+		if (this.batcher) {
+			this.batcher.start()
+		}
+	}
+
+	/** Detect runtime environment (legacy, kept for compatibility) */
 	private detectEnvironment(): string {
 		if (typeof globalThis !== "undefined" && "navigator" in globalThis) {
 			return "browser"

@@ -15,6 +15,7 @@ export type {
 	InternalLogEntry,
 	LogMetadata,
 	RedactionConfig,
+	RuntimeType,
 	VedaTraceConfig,
 	VedaTraceLevel,
 	VedaTraceLog,
@@ -29,12 +30,14 @@ export { VedaTraceConsoleTransport } from "@/transports/console"
 export type { HttpTransportConfig } from "@/transports/http"
 export { VedaTraceHttpTransport } from "@/transports/http"
 export { redact } from "@/utils/redaction"
+export { detectRuntime, isEdgeRuntime } from "@/utils/runtime"
 
 import { VedaTraceBatcher } from "@/core/batcher"
 import { VedaTraceLogger } from "@/core/logger"
 import type { VedaTraceConfig, VedaTraceLoggerInterface } from "@/core/types"
 import type { HttpTransportConfig } from "@/transports"
 import { VedaTraceConsoleTransport, VedaTraceHttpTransport } from "@/transports"
+import { isEdgeRuntime } from "@/utils/runtime"
 
 /**
  * Create a VedaTrace logger instance
@@ -55,6 +58,11 @@ export function vedatrace(
 ): VedaTraceLoggerInterface {
 	const logger = new VedaTraceLogger(config)
 
+	const isEdge = isEdgeRuntime()
+
+	const shouldImmediateFlush = config.immediateFlush ?? isEdge
+	const shouldAutoStart = config.autoStart ?? !isEdge
+
 	// If API key provided and no custom transports, add HTTP transport
 	if (config.apiKey && (!config.transports || config.transports.length === 0)) {
 		const httpConfig: HttpTransportConfig = { apiKey: config.apiKey }
@@ -65,13 +73,15 @@ export function vedatrace(
 			[httpTransport],
 			{
 				batchSize: config.batchSize ?? 100,
-				flushInterval: config.flushInterval ?? 1000,
+				flushInterval: config.flushInterval ?? (isEdge ? 1000 : 5000),
 				maxRetries: config.maxRetries ?? 3,
 				retryDelay: config.retryDelay ?? 1000,
 				unrefTimer: config.unrefTimer,
 			},
 			config.onError,
 			config.onSuccess,
+			shouldImmediateFlush,
+			shouldAutoStart,
 		)
 
 		logger.setBatcher(batcher)

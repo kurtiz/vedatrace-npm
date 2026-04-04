@@ -54,6 +54,10 @@ export interface VedaTraceConfig {
 	immediateFlush?: boolean
 	/** Unref the flush timer (Node.js only, default: false) */
 	unrefTimer?: boolean
+	/** Auto-start the flush timer (default: true, auto-disabled for edge runtimes) */
+	autoStart?: boolean
+	/** Force a specific runtime (auto-detected by default) */
+	runtime?: RuntimeType
 }
 
 /** Redaction configuration */
@@ -65,6 +69,15 @@ export interface RedactionConfig {
 	/** Enable automatic PII detection */
 	autoDetectPii?: boolean
 }
+
+/** Runtime environment type */
+export type RuntimeType =
+	| "node"
+	| "browser"
+	| "cloudflare"
+	| "deno"
+	| "bun"
+	| "edge"
 
 /** Transport interface for sending logs */
 export interface VedaTraceTransport {
@@ -121,4 +134,6 @@ export interface VedaTraceLoggerInterface {
 	child(defaults: LogMetadata): VedaTraceLoggerInterface
 	flush(): Promise<void>
 	stop(): void
+	start(): void
+	runtime: RuntimeType
 }

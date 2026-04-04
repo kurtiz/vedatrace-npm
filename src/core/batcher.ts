@@ -21,8 +21,11 @@ export class VedaTraceBatcher {
 		private onError?: (error: Error) => void,
 		private onSuccess?: (() => void) | undefined,
 		private immediateFlush = false,
+		autoStart = true,
 	) {
-		this.startFlushTimer()
+		if (autoStart && !immediateFlush) {
+			this.startFlushTimer()
+		}
 	}
 
 	/** Add log to queue */
@@ -130,6 +133,13 @@ export class VedaTraceBatcher {
 		if (this.flushTimer) {
 			clearInterval(this.flushTimer)
 			this.flushTimer = null
+		}
+	}
+
+	/** Start the flush timer (for manual control in edge runtimes) */
+	start(): void {
+		if (!this.flushTimer && !this.immediateFlush) {
+			this.startFlushTimer()
 		}
 	}
 
