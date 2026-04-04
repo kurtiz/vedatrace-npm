@@ -16,8 +16,8 @@ import type {
 	LogMetadata,
 	VedaTraceConfig,
 	VedaTraceLoggerInterface,
-} from "../core/types"
-import { vedatrace } from "../index"
+} from "@/core/types"
+import { vedatrace } from "@/index"
 
 // Create context
 const VedaTraceContext = createContext<VedaTraceLoggerInterface | null>(null)
