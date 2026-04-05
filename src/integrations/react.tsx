@@ -137,11 +137,9 @@ export function useVedaTraceChild(
 	const parentLogger = useVedaTrace()
 	const metadataRef = useRef(metadata)
 
-	const childLogger = useMemo(() => {
+	return useMemo(() => {
 		return parentLogger.child(metadataRef.current)
 	}, [parentLogger])
-
-	return childLogger
 }
 
 /**

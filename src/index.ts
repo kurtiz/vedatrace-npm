@@ -61,7 +61,6 @@ export function vedatrace(
 	const isEdge = isEdgeRuntime()
 
 	const shouldImmediateFlush = config.immediateFlush ?? isEdge
-	const shouldAutoStart = config.autoStart ?? !isEdge
 
 	// If API key provided and no custom transports, add HTTP transport
 	if (config.apiKey && (!config.transports || config.transports.length === 0)) {
@@ -81,7 +80,6 @@ export function vedatrace(
 			config.onError,
 			config.onSuccess,
 			shouldImmediateFlush,
-			shouldAutoStart,
 		)
 
 		logger.setBatcher(batcher)

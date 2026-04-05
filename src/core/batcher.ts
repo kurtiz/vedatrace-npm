@@ -21,16 +21,19 @@ export class VedaTraceBatcher {
 		private onError?: (error: Error) => void,
 		private onSuccess?: (() => void) | undefined,
 		private immediateFlush = false,
-		autoStart = false,
 	) {
-		if (autoStart && !immediateFlush) {
-			this.startFlushTimer()
-		}
+		// No timer setup in constructor - lazy initialization
+		// Timer starts on first log in add() method
 	}
 
 	/** Add log to queue */
 	add(log: InternalLogEntry): void {
 		this.queue.push(log)
+
+		// Start timer on first log (happens in handler context - allowed in edge runtimes)
+		if (!this.flushTimer && !this.immediateFlush) {
+			this.startFlushTimer()
+		}
 
 		if (this.immediateFlush || this.queue.length >= this.config.batchSize) {
 			this.flush()

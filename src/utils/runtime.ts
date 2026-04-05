@@ -1,8 +1,3 @@
-/**
- * Runtime environment detection utility
- * Detects Node.js, Browser, Cloudflare Workers, Deno, Bun
- */
-
 export type RuntimeType =
 	| "node"
 	| "browser"
@@ -11,38 +6,69 @@ export type RuntimeType =
 	| "bun"
 	| "edge"
 
+/**
+ * Runtime environment detection utility
+ * Detects Node.js, Browser, Cloudflare Workers, Deno, Bun
+ */
+
 export function detectRuntime(): RuntimeType {
-	if (typeof process !== "undefined" && process.versions?.node) {
-		return "node"
-	}
+	const g = globalThis as any
 
-	if (
-		typeof globalThis !== "undefined" &&
-		"navigator" in globalThis &&
-		typeof self === "undefined"
-	) {
-		return "browser"
-	}
-
-	if (typeof caches !== "undefined") {
-		return "cloudflare"
-	}
-
-	const maybeDeno = globalThis as Record<string, unknown> | undefined
-	if (maybeDeno?.version) {
+	// --- 1. Deno (very reliable) ---
+	if (typeof g.Deno !== "undefined" && g.Deno?.version?.deno) {
 		return "deno"
 	}
 
-	const maybeBun = globalThis as Record<string, unknown> | undefined
-	if (maybeBun?.Bun) {
+	// --- 2. Bun (very reliable) ---
+	if (typeof g.Bun !== "undefined") {
 		return "bun"
 	}
 
+	// --- 3. Cloudflare Workers (multiple signals) ---
+	// Avoid relying ONLY on userAgent
+	if (
+		typeof g.WebSocketPair !== "undefined" || // CF-specific
+		(typeof navigator !== "undefined" &&
+			navigator.userAgent === "Cloudflare-Workers")
+	) {
+		return "cloudflare"
+	}
+
+	// --- 4. Node.js (avoid false positives from polyfills) ---
+	if (
+		typeof process !== "undefined" &&
+		process.versions?.node &&
+		!process.versions?.bun && // exclude Bun
+		!process.versions?.deno // defensive (rare)
+	) {
+		return "node"
+	}
+
+	// --- 5. Browser ---
+	if (typeof window !== "undefined" && typeof document !== "undefined") {
+		return "browser"
+	}
+
+	// --- 6. Generic Edge runtime (Vercel Edge, etc.) ---
+	// These usually have:
+	// - no process
+	// - no window
+	// - fetch available
+	if (
+		typeof fetch !== "undefined" &&
+		typeof window === "undefined" &&
+		typeof process === "undefined"
+	) {
+		return "edge"
+	}
+
+	// --- Fallback ---
 	return "edge"
 }
 
 export function isEdgeRuntime(): boolean {
 	const runtime = detectRuntime()
+
 	return (
 		runtime === "cloudflare" ||
 		runtime === "deno" ||

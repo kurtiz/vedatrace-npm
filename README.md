@@ -72,6 +72,10 @@ const logger = vedatrace({
     mask: '[REDACTED]'
   },
   
+  // Advanced
+  immediateFlush: false,           // Flush on each log (dev mode, edge runtimes)
+  runtime: 'auto',                 // Force runtime: 'node' | 'browser' | 'cloudflare' | 'deno' | 'bun'
+  
   // Callbacks
   onError: (err) => console.error('VedaTrace error:', err),
   onSuccess: () => console.log('Logs sent')
@@ -174,13 +178,15 @@ function MyComponent() {
 ```typescript
 import { vedatrace } from 'vedatrace'
 
+// Works seamlessly - no special configuration needed
+// Timer starts automatically on first log (in handler context)
+const logger = vedatrace({ 
+  apiKey: env.VEDATRACE_API_KEY,
+  service: 'worker'
+})
+
 export default {
   async fetch(req, env, ctx) {
-    const logger = vedatrace({ 
-      apiKey: env.VEDATRACE_API_KEY,
-      service: 'worker'
-    })
-    
     logger.info('Request received', { 
       method: req.method,
       url: req.url 
@@ -193,6 +199,8 @@ export default {
   }
 }
 ```
+
+The SDK automatically detects edge runtimes (Cloudflare Workers, Deno, Bun) and uses lazy timer initialization - the flush timer starts on the first log call, which happens inside your handler where async I/O is allowed.
 
 ## Advanced Usage
 
@@ -307,6 +315,18 @@ Manually flush pending logs. Returns a Promise.
 ### `logger.stop()`
 
 Stop the background flush timer. Call this for explicit cleanup in long-running processes or before shutdown.
+
+### `logger.start()`
+
+Manually start the flush timer. Usually not needed - the timer starts automatically on first log. Useful if you want to ensure the timer is running before any logs are sent.
+
+### `logger.runtime`
+
+Get the detected runtime environment. Returns: `'node' | 'browser' | 'cloudflare' | 'deno' | 'bun' | 'edge'`
+
+```typescript
+console.log(logger.runtime) // 'cloudflare' when running in Workers
+```
 
 ## License
 
