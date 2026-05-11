@@ -1,10 +1,35 @@
 /**
- * VedaTrace SDK - Universal JavaScript logging
+ * VedaTrace SDK - Universal JavaScript logging (revised for edge)
  *
- * Import examples:
+ * Usage with Cloudflare Workers / Hono (recommended):
+ * ```typescript
  * import { vedatrace } from 'vedatrace'
- * import { VedaTraceHttpTransport } from 'vedatrace/transports'
- * import { vedaTraceMiddleware } from 'vedatrace/express'
+ *
+ * export default {
+ *   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+ *     const logger = vedatrace({
+ *       apiKey: env.VEDATRACE_API_KEY,
+ *       service: 'my-worker',
+ *     })
+ *
+ *     logger.withExecutionContext(ctx)
+ *     logger.info('Request received')
+ *
+ *     // Background flush is protected by ctx.waitUntil()
+ *     return await app.fetch(request, env, ctx)
+ *   }
+ * }
+ * ```
+ *
+ * Usage without ExecutionContext (manual flush required):
+ * ```typescript
+ * app.get('/sync', async (c) => {
+ *   const logger = vedatrace({ apiKey: 'key', service: 'app' })
+ *   logger.info('log before response')
+ *   await logger.flush() // Must await before returning
+ *   return c.json({ ok: true })
+ * })
+ * ```
  */
 
 export { VedaTraceBatcher } from "@/core/batcher"
@@ -39,33 +64,20 @@ import type { HttpTransportConfig } from "@/transports"
 import { VedaTraceConsoleTransport, VedaTraceHttpTransport } from "@/transports"
 import { isEdgeRuntime } from "@/utils/runtime"
 
-/**
- * Create a VedaTrace logger instance
- *
- * @example
- * ```typescript
- * const logger = vedatrace({
- *   apiKey: 'your-api-key',
- *   service: 'my-service'
- * })
- *
- * logger.info('Hello world')
- * logger.error('Something went wrong', { error: err })
- * ```
- */
-export function vedatrace(
-	config: VedaTraceConfig = {},
-): VedaTraceLoggerInterface {
-	const logger = new VedaTraceLogger(config)
+export interface VedaTraceInstance extends VedaTraceLoggerInterface {
+	withExecutionContext(ctx: {
+		waitUntil(promise: Promise<unknown>): void
+	}): this
+}
 
+export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
+	const logger = new VedaTraceLogger(config)
 	const isEdge = isEdgeRuntime()
 
-	const shouldImmediateFlush = config.immediateFlush ?? isEdge
-
-	// If API key provided and no custom transports, add HTTP transport
 	if (config.apiKey && (!config.transports || config.transports.length === 0)) {
 		const httpConfig: HttpTransportConfig = { apiKey: config.apiKey }
 		if (config.endpoint) httpConfig.endpoint = config.endpoint
+
 		const httpTransport = new VedaTraceHttpTransport(httpConfig)
 
 		const batcher = new VedaTraceBatcher(
@@ -76,10 +88,11 @@ export function vedatrace(
 				maxRetries: config.maxRetries ?? 3,
 				retryDelay: config.retryDelay ?? 1000,
 				unrefTimer: config.unrefTimer,
+				executionContext: config.executionContext,
 			},
 			config.onError,
 			config.onSuccess,
-			shouldImmediateFlush,
+			config.immediateFlush ?? (isEdge && !config.executionContext),
 		)
 
 		logger.setBatcher(batcher)
@@ -94,17 +107,9 @@ export function vedatrace(
 		}
 	}
 
-	return logger
+	return logger as VedaTraceInstance
 }
 
-/**
- * Create a console-only logger for development
- *
- * @example
- * ```typescript
- * const logger = devVedatrace({ service: 'my-service' })
- * ```
- */
 export function devVedatrace(
 	config: Omit<VedaTraceConfig, "apiKey" | "transports"> = {},
 ): VedaTraceLoggerInterface {
@@ -120,5 +125,4 @@ export function devVedatrace(
 	})
 }
 
-// Default export
 export default vedatrace

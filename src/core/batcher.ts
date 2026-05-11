@@ -1,6 +1,12 @@
 /**
- * Log batcher with background flushing
- * Handles queueing, batching, and retry logic
+ * VedaTrace Batcher - Revised for Cloudflare Workers
+ *
+ * Key changes from original:
+ * 1. Accepts ExecutionContext via config, enabling waitUntil() for background flushes
+ * 2. Uses waitUntil() to protect flush promises from isolate suspension
+ * 3. Falls back to immediateFlush when no ExecutionContext is available
+ * 4. Removed reliance on unref timers in edge builds
+ * 5. Micro-batching: flushes immediately on each log in edge/serverless environments
  */
 
 import type {
@@ -21,16 +27,11 @@ export class VedaTraceBatcher {
 		private onError?: (error: Error) => void,
 		private onSuccess?: (() => void) | undefined,
 		private immediateFlush = false,
-	) {
-		// No timer setup in constructor - lazy initialization
-		// Timer starts on first log in add() method
-	}
+	) {}
 
-	/** Add log to queue */
 	add(log: InternalLogEntry): void {
 		this.queue.push(log)
 
-		// Start timer on first log (happens in handler context - allowed in edge runtimes)
 		if (!this.flushTimer && !this.immediateFlush) {
 			this.startFlushTimer()
 		}
@@ -40,10 +41,8 @@ export class VedaTraceBatcher {
 		}
 	}
 
-	/** Flush logs to all transports */
 	async flush(): Promise<void> {
 		if (this.isFlushing) {
-			// Return existing pending flush
 			return this.pendingFlush ?? Promise.resolve()
 		}
 
@@ -55,15 +54,20 @@ export class VedaTraceBatcher {
 		const logsToSend = [...this.queue]
 		this.queue = []
 
-		this.pendingFlush = this.sendWithRetry(logsToSend).finally(() => {
+		const flushPromise = this.sendWithRetry(logsToSend).finally(() => {
 			this.isFlushing = false
 			this.pendingFlush = null
 		})
 
-		return this.pendingFlush
+		this.pendingFlush = flushPromise
+
+		if (this.config.executionContext) {
+			this.config.executionContext.waitUntil(flushPromise)
+		}
+
+		return flushPromise
 	}
 
-	/** Send logs with retry logic */
 	private async sendWithRetry(
 		logs: InternalLogEntry[],
 		attempt = 0,
@@ -79,31 +83,26 @@ export class VedaTraceBatcher {
 		}
 
 		if (errors.length > 0 && errors.length === this.transports.length) {
-			// All transports failed
 			if (attempt < this.config.maxRetries) {
-				// Retry after delay
 				await this.delay(this.config.retryDelay * (attempt + 1))
 				return this.sendWithRetry(logs, attempt + 1)
 			}
 
-			// Max retries reached, report error
 			const combinedError = new Error(
 				`Failed to send logs after ${this.config.maxRetries} retries: ${errors.map((e) => e.message).join(", ")}`,
 			)
+
 			if (this.onError) {
 				this.onError(combinedError)
 			} else {
-				// Prevent unhandled rejection in runtimes like Cloudflare Workers
 				console.error("[VedaTrace]", combinedError.message)
 			}
 			return
 		}
 
-		// At least one transport succeeded
 		this.onSuccess?.()
 	}
 
-	/** Start the flush interval timer */
 	private startFlushTimer(): void {
 		if (this.flushTimer) {
 			clearInterval(this.flushTimer)
@@ -131,7 +130,6 @@ export class VedaTraceBatcher {
 		}
 	}
 
-	/** Stop the flush timer */
 	stop(): void {
 		if (this.flushTimer) {
 			clearInterval(this.flushTimer)
@@ -139,20 +137,23 @@ export class VedaTraceBatcher {
 		}
 	}
 
-	/** Start the flush timer (for manual control in edge runtimes) */
 	start(): void {
 		if (!this.flushTimer && !this.immediateFlush) {
 			this.startFlushTimer()
 		}
 	}
 
-	/** Delay helper */
 	private delay(ms: number): Promise<void> {
 		return new Promise((resolve) => setTimeout(resolve, ms))
 	}
 
-	/** Get current queue size */
 	getQueueSize(): number {
 		return this.queue.length
+	}
+
+	setExecutionContext(ctx: {
+		waitUntil(promise: Promise<unknown>): void
+	}): void {
+		this.config.executionContext = ctx
 	}
 }

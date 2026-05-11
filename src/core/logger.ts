@@ -1,10 +1,16 @@
 /**
- * Core VedaTrace Logger implementation
+ * Core VedaTrace Logger implementation (revised)
+ *
+ * Key changes:
+ * 1. Added withExecutionContext() for Cloudflare Workers support
+ * 2. Protected flush via waitUntil() when ExecutionContext is attached
+ * 3. Better batcher management with execution context passthrough
  */
 
-import { detectRuntime } from "../utils/runtime"
+import { detectRuntime } from "@/utils/runtime"
 import { VedaTraceBatcher } from "./batcher"
 import type {
+	BatcherConfig,
 	InternalLogEntry,
 	LogMetadata,
 	RuntimeType,
@@ -21,27 +27,29 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 	private config: Required<
 		Pick<
 			VedaTraceConfig,
-			"batchSize" | "flushInterval" | "maxRetries" | "retryDelay"
-		>
-	> &
-		Pick<
-			VedaTraceConfig,
+			| "batchSize"
+			| "flushInterval"
+			| "maxRetries"
+			| "retryDelay"
 			| "endpoint"
 			| "onError"
 			| "onSuccess"
 			| "debug"
 			| "immediateFlush"
 			| "unrefTimer"
-		> & {
-			service?: string
-			apiKey?: string
-			environment?: string
-		}
+		>
+	> & {
+		service?: string
+		apiKey?: string
+		environment?: string
+	}
 	private childDefaults: LogMetadata
+	private _executionContext?: { waitUntil(promise: Promise<unknown>): void }
 
 	constructor(config: VedaTraceConfig = {}, childDefaults: LogMetadata = {}) {
 		this.runtime = config.runtime ?? detectRuntime()
 		this.childDefaults = childDefaults
+		this._executionContext = config.executionContext
 		this.config = {
 			service: config.service,
 			apiKey: config.apiKey,
@@ -58,32 +66,27 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			unrefTimer: config.unrefTimer,
 		}
 
-		// Initialize batcher if not disabled
 		if (!config.disabled) {
 			this.initializeBatcher(config)
 		}
 	}
 
-	/** Initialize the batcher with transports */
 	private initializeBatcher(config: VedaTraceConfig): void {
 		const transports = config.transports ?? []
 
-		// Add HTTP transport if API key provided and no transports specified
-		if (config.apiKey && transports.length === 0) {
-			// HTTP transport will be added in index.ts to avoid circular deps
-			// For now, we'll handle this in the factory function
-		}
-
 		if (transports.length > 0) {
+			const batcherConfig: BatcherConfig = {
+				batchSize: this.config.batchSize,
+				flushInterval: this.config.flushInterval,
+				maxRetries: this.config.maxRetries,
+				retryDelay: this.config.retryDelay,
+				unrefTimer: this.config.unrefTimer,
+				executionContext: this._executionContext,
+			}
+
 			this.batcher = new VedaTraceBatcher(
 				transports,
-				{
-					batchSize: this.config.batchSize,
-					flushInterval: this.config.flushInterval,
-					maxRetries: this.config.maxRetries,
-					retryDelay: this.config.retryDelay,
-					unrefTimer: this.config.unrefTimer,
-				},
+				batcherConfig,
 				this.config.onError,
 				this.config.onSuccess,
 				this.config.immediateFlush,
@@ -91,37 +94,42 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		}
 	}
 
-	/** Set batcher (called from factory function) */
 	setBatcher(batcher: VedaTraceBatcher): void {
 		this.batcher = batcher
 	}
 
-	/** Log at debug level */
+	withExecutionContext(ctx: {
+		waitUntil(promise: Promise<unknown>): void
+	}): this {
+		this._executionContext = ctx
+
+		if (this.batcher) {
+			this.batcher.setExecutionContext(ctx)
+		}
+
+		return this
+	}
+
 	debug(message: string, metadata?: LogMetadata): void {
 		this.log("debug", message, metadata)
 	}
 
-	/** Log at info level */
 	info(message: string, metadata?: LogMetadata): void {
 		this.log("info", message, metadata)
 	}
 
-	/** Log at warn level */
 	warn(message: string, metadata?: LogMetadata): void {
 		this.log("warn", message, metadata)
 	}
 
-	/** Log at error level */
 	error(message: string | Error, metadata?: LogMetadata): void {
 		this.log("error", message, metadata)
 	}
 
-	/** Log at fatal level */
 	fatal(message: string | Error, metadata?: LogMetadata): void {
 		this.log("fatal", message, metadata)
 	}
 
-	/** Internal log method */
 	private log(
 		level: VedaTraceLevel,
 		message: string | Error,
@@ -131,14 +139,10 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			return
 		}
 
-		// Merge child defaults with provided metadata
 		const mergedMetadata = { ...this.childDefaults, ...metadata }
-
-		// Extract service if provided in metadata (remove from metadata to avoid duplication)
 		const { service: metaService, ...cleanMetadata } = mergedMetadata
 		const service = metaService ?? this.config.service
 
-		// Build log entry
 		const logEntry: InternalLogEntry = {
 			level,
 			message: message instanceof Error ? message.message : message,
@@ -146,27 +150,23 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			timestamp: Date.now(),
 			metadata: cleanMetadata,
 			_sdk: {
-				source: this.detectEnvironment(),
+				source: detectRuntime(),
 				version: SDK_VERSION,
 			},
 		}
 
-		// Add stack trace for errors
 		if (message instanceof Error) {
 			logEntry._sdk ??= {}
 			logEntry._sdk.stackTrace = message.stack
 		}
 
-		// Debug output
 		if (this.config.debug) {
-			// eslint-disable-next-line no-console
 			console.log(`[VedaTrace:${level}]`, logEntry)
 		}
 
 		this.batcher.add(logEntry)
 	}
 
-	/** Create a child logger with default metadata */
 	child(defaults: LogMetadata): VedaTraceLoggerInterface {
 		const mergedDefaults = { ...this.childDefaults, ...defaults }
 		const childLogger = new VedaTraceLogger(
@@ -176,11 +176,11 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 				endpoint: this.config.endpoint,
 				environment: this.config.environment,
 				disabled: !this.batcher,
+				executionContext: this._executionContext,
 			},
 			mergedDefaults,
 		)
 
-		// Share the same batcher for efficiency
 		if (this.batcher) {
 			childLogger.setBatcher(this.batcher)
 		}
@@ -188,29 +188,27 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		return childLogger
 	}
 
-	/** Flush pending logs */
 	async flush(): Promise<void> {
 		if (this.batcher) {
-			await this.batcher.flush()
+			const flushPromise = this.batcher.flush()
+
+			if (this._executionContext) {
+				this._executionContext.waitUntil(flushPromise)
+			}
+
+			return flushPromise
 		}
 	}
 
-	/** Stop the batcher and flush timer */
 	stop(): void {
 		if (this.batcher) {
 			this.batcher.stop()
 		}
 	}
 
-	/** Start the flush timer (for manual control in edge runtimes) */
 	start(): void {
 		if (this.batcher) {
 			this.batcher.start()
 		}
-	}
-
-	/** Detect runtime environment - use unified detection */
-	private detectEnvironment(): string {
-		return detectRuntime()
 	}
 }
