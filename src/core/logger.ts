@@ -3,7 +3,7 @@
  * Supports Cloudflare Workers / Pages via withContext() integration
  */
 
-import { detectRuntime } from "../utils/runtime"
+import { detectRuntime } from "@/utils/runtime"
 import { VedaTraceBatcher } from "./batcher"
 import type {
 	BatcherConfig,
