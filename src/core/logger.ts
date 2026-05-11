@@ -16,7 +16,7 @@ import type {
 	VedaTraceLoggerInterface,
 } from "./types"
 
-const SDK_VERSION = "1.0.0"
+const SDK_VERSION = process.env.npm_package_version ?? "0.0.0"
 
 export class VedaTraceLogger implements VedaTraceLoggerInterface {
 	private batcher: VedaTraceBatcher | null = null
