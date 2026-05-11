@@ -1,10 +1,12 @@
 /**
- * Core types for VedaTrace SDK (revised)
- * Includes ExecutionContext support for Cloudflare Workers
+ * Core types for VedaTrace SDK
+ * Schema-compliant with ingestion endpoint
  */
 
+/** Log severity levels */
 export type VedaTraceLevel = "debug" | "info" | "warn" | "error" | "fatal"
 
+/** Log entry structure matching ingestion API */
 export interface VedaTraceLog {
 	level: VedaTraceLevel
 	message: string
@@ -13,6 +15,16 @@ export interface VedaTraceLog {
 	metadata?: Record<string, unknown>
 }
 
+/**
+ * Generic Edge Context interface for Cloudflare Workers / Pages / etc.
+ * This avoids importing heavy framework-specific types and works with any
+ * environment that provides a waitUntil() method.
+ */
+export interface VedaTraceEdgeContext {
+	waitUntil(promise: Promise<unknown>): void
+}
+
+/** Configuration options for VedaTrace SDK */
 export interface VedaTraceConfig {
 	apiKey?: string
 	service?: string
@@ -34,9 +46,7 @@ export interface VedaTraceConfig {
 	runtime?: RuntimeType
 
 	/** Cloudflare Workers ExecutionContext - enables waitUntil support */
-	executionContext?: {
-		waitUntil(promise: Promise<unknown>): void
-	}
+	executionContext?: VedaTraceEdgeContext
 }
 
 export interface RedactionConfig {
@@ -82,9 +92,7 @@ export interface BatcherConfig {
 	maxRetries: number
 	retryDelay: number
 	unrefTimer?: boolean
-	executionContext?: {
-		waitUntil(promise: Promise<unknown>): void
-	}
+	executionContext?: VedaTraceEdgeContext
 }
 
 export interface VedaTraceLoggerInterface {
@@ -98,4 +106,16 @@ export interface VedaTraceLoggerInterface {
 	stop(): void
 	start(): void
 	runtime: RuntimeType
+}
+
+/** Extended logger interface with context support */
+export interface VedaTraceInstance extends VedaTraceLoggerInterface {
+	/** Attach execution context for waitUntil support */
+	withContext(ctx: VedaTraceEdgeContext): this
+
+	/** Check if context is attached */
+	hasContext(): boolean
+
+	/** Get current execution context */
+	getContext(): VedaTraceEdgeContext | undefined
 }

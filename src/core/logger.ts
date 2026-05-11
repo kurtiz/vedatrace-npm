@@ -1,13 +1,9 @@
 /**
- * Core VedaTrace Logger implementation (revised)
- *
- * Key changes:
- * 1. Added withExecutionContext() for Cloudflare Workers support
- * 2. Protected flush via waitUntil() when ExecutionContext is attached
- * 3. Better batcher management with execution context passthrough
+ * Core VedaTrace Logger implementation
+ * Supports Cloudflare Workers / Pages via withContext() integration
  */
 
-import { detectRuntime } from "@/utils/runtime"
+import { detectRuntime } from "../utils/runtime"
 import { VedaTraceBatcher } from "./batcher"
 import type {
 	BatcherConfig,
@@ -15,6 +11,7 @@ import type {
 	LogMetadata,
 	RuntimeType,
 	VedaTraceConfig,
+	VedaTraceEdgeContext,
 	VedaTraceLevel,
 	VedaTraceLoggerInterface,
 } from "./types"
@@ -44,12 +41,12 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		environment?: string
 	}
 	private childDefaults: LogMetadata
-	private _executionContext?: { waitUntil(promise: Promise<unknown>): void }
+	private _context: VedaTraceEdgeContext | undefined
 
 	constructor(config: VedaTraceConfig = {}, childDefaults: LogMetadata = {}) {
 		this.runtime = config.runtime ?? detectRuntime()
 		this.childDefaults = childDefaults
-		this._executionContext = config.executionContext
+		this._context = config.executionContext
 		this.config = {
 			service: config.service,
 			apiKey: config.apiKey,
@@ -81,7 +78,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 				maxRetries: this.config.maxRetries,
 				retryDelay: this.config.retryDelay,
 				unrefTimer: this.config.unrefTimer,
-				executionContext: this._executionContext,
+				executionContext: this._context,
 			}
 
 			this.batcher = new VedaTraceBatcher(
@@ -98,16 +95,25 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		this.batcher = batcher
 	}
 
-	withExecutionContext(ctx: {
-		waitUntil(promise: Promise<unknown>): void
-	}): this {
-		this._executionContext = ctx
+	/** Attach execution context for waitUntil support (Cloudflare Workers / Pages) */
+	withContext(ctx: VedaTraceEdgeContext): this {
+		this._context = ctx
 
 		if (this.batcher) {
-			this.batcher.setExecutionContext(ctx)
+			this.batcher.setContext(ctx)
 		}
 
 		return this
+	}
+
+	/** Check if context is attached */
+	hasContext(): boolean {
+		return this._context !== undefined
+	}
+
+	/** Get current execution context */
+	getContext(): VedaTraceEdgeContext | undefined {
+		return this._context
 	}
 
 	debug(message: string, metadata?: LogMetadata): void {
@@ -176,7 +182,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 				endpoint: this.config.endpoint,
 				environment: this.config.environment,
 				disabled: !this.batcher,
-				executionContext: this._executionContext,
+				executionContext: this._context,
 			},
 			mergedDefaults,
 		)
@@ -192,8 +198,8 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		if (this.batcher) {
 			const flushPromise = this.batcher.flush()
 
-			if (this._executionContext) {
-				this._executionContext.waitUntil(flushPromise)
+			if (this._context) {
+				this._context.waitUntil(flushPromise)
 			}
 
 			return flushPromise

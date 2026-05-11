@@ -5,18 +5,19 @@
  * and logs all batcher errors including retries and queue management issues.
  */
 
+import type {
+	BatcherConfig,
+	InternalLogEntry,
+	VedaTraceTransport,
+} from "@/core/types"
 import {
 	logBatcherError,
 	logDiagnostic,
 	logMaxRetriesExceeded,
 	logQueueStatus,
 	logRetryAttempt,
-} from "../diagnostics/index"
-import type {
-	BatcherConfig,
-	InternalLogEntry,
-	VedaTraceTransport,
-} from "./types"
+	logTransportError,
+} from "@/diagnostics/index"
 
 export class DiagnosticBatcher {
 	private queue: InternalLogEntry[] = []

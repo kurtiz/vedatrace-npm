@@ -1,25 +1,28 @@
 /**
- * VedaTrace Batcher - Revised for Cloudflare Workers
+ * VedaTrace Batcher - Context-Aware for Cloudflare Workers
  *
- * Key changes from original:
- * 1. Accepts ExecutionContext via config, enabling waitUntil() for background flushes
- * 2. Uses waitUntil() to protect flush promises from isolate suspension
- * 3. Falls back to immediateFlush when no ExecutionContext is available
- * 4. Removed reliance on unref timers in edge builds
- * 5. Micro-batching: flushes immediately on each log in edge/serverless environments
+ * Key features:
+ * 1. Stores EdgeContext for waitUntil() integration
+ * 2. setContext() method for post-initialization context attachment
+ * 3. Fire-and-forget flush wrapped in ctx.waitUntil() when context is available
+ * 4. Debounced flush to avoid excessive network calls
+ * 5. Automatic flush on each log entry when context is present
  */
 
 import type {
 	BatcherConfig,
 	InternalLogEntry,
+	VedaTraceEdgeContext,
 	VedaTraceTransport,
 } from "./types"
 
 export class VedaTraceBatcher {
 	private queue: InternalLogEntry[] = []
 	private flushTimer: ReturnType<typeof setInterval> | null = null
+	private flushDebounceTimer: ReturnType<typeof setTimeout> | null = null
 	private isFlushing = false
 	private pendingFlush: Promise<void> | null = null
+	private context: VedaTraceEdgeContext | undefined
 
 	constructor(
 		private transports: VedaTraceTransport[],
@@ -27,8 +30,21 @@ export class VedaTraceBatcher {
 		private onError?: (error: Error) => void,
 		private onSuccess?: (() => void) | undefined,
 		private immediateFlush = false,
-	) {}
+	) {
+		this.context = config.executionContext
+	}
 
+	/** Attach execution context after initialization */
+	setContext(ctx: VedaTraceEdgeContext): void {
+		this.context = ctx
+	}
+
+	/** Get current context */
+	getContext(): VedaTraceEdgeContext | undefined {
+		return this.context
+	}
+
+	/** Add log to queue with context-aware flush */
 	add(log: InternalLogEntry): void {
 		this.queue.push(log)
 
@@ -36,11 +52,37 @@ export class VedaTraceBatcher {
 			this.startFlushTimer()
 		}
 
-		if (this.immediateFlush || this.queue.length >= this.config.batchSize) {
+		if (this.immediateFlush || this.context) {
+			this.debouncedFlush()
+		} else if (this.queue.length >= this.config.batchSize) {
 			this.flush()
 		}
 	}
 
+	/** Debounced flush - prevents rapid-fire flushes */
+	private debouncedFlush(): void {
+		if (this.flushDebounceTimer) {
+			clearTimeout(this.flushDebounceTimer)
+		}
+
+		this.flushDebounceTimer = setTimeout(() => {
+			this.flushDebounceTimer = null
+			this.flush().catch((error) => {
+				if (this.onError) {
+					this.onError(
+						error instanceof Error ? error : new Error(String(error)),
+					)
+				} else {
+					console.error(
+						"[VedaTrace] Debounced flush error:",
+						error instanceof Error ? error.message : String(error),
+					)
+				}
+			})
+		}, 100)
+	}
+
+	/** Flush logs to all transports with waitUntil protection */
 	async flush(): Promise<void> {
 		if (this.isFlushing) {
 			return this.pendingFlush ?? Promise.resolve()
@@ -61,8 +103,8 @@ export class VedaTraceBatcher {
 
 		this.pendingFlush = flushPromise
 
-		if (this.config.executionContext) {
-			this.config.executionContext.waitUntil(flushPromise)
+		if (this.context) {
+			this.context.waitUntil(flushPromise)
 		}
 
 		return flushPromise
@@ -135,6 +177,10 @@ export class VedaTraceBatcher {
 			clearInterval(this.flushTimer)
 			this.flushTimer = null
 		}
+		if (this.flushDebounceTimer) {
+			clearTimeout(this.flushDebounceTimer)
+			this.flushDebounceTimer = null
+		}
 	}
 
 	start(): void {
@@ -151,9 +197,7 @@ export class VedaTraceBatcher {
 		return this.queue.length
 	}
 
-	setExecutionContext(ctx: {
-		waitUntil(promise: Promise<unknown>): void
-	}): void {
-		this.config.executionContext = ctx
+	setExecutionContext(ctx: VedaTraceEdgeContext): void {
+		this.context = ctx
 	}
 }

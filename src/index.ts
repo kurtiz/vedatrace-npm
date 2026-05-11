@@ -1,35 +1,42 @@
 /**
- * VedaTrace SDK - Universal JavaScript logging (revised for edge)
+ * VedaTrace SDK - Universal JavaScript logging
  *
- * Usage with Cloudflare Workers / Hono (recommended):
- * ```typescript
- * import { vedatrace } from 'vedatrace'
+ * Framework-agnostic SDK with first-class Cloudflare Workers support.
  *
+ * Key features:
+ * - Automatic waitUntil() integration for Cloudflare Workers / Pages
+ * - Fire-and-forget logging - SDK handles background flush lifecycle
+ * - Edge-safe batching with debounced flushes
+ * - Works with any framework (Hono, Fastify, Express, etc.) or raw Workers
+ *
+ * @example
+ * // Raw Cloudflare Worker (recommended pattern)
  * export default {
  *   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
  *     const logger = vedatrace({
  *       apiKey: env.VEDATRACE_API_KEY,
  *       service: 'my-worker',
- *     })
+ *     }).withContext(ctx)
  *
- *     logger.withExecutionContext(ctx)
  *     logger.info('Request received')
- *
- *     // Background flush is protected by ctx.waitUntil()
- *     return await app.fetch(request, env, ctx)
+ *     return new Response('Hello')
  *   }
  * }
- * ```
  *
- * Usage without ExecutionContext (manual flush required):
- * ```typescript
- * app.get('/sync', async (c) => {
- *   const logger = vedatrace({ apiKey: 'key', service: 'app' })
- *   logger.info('log before response')
- *   await logger.flush() // Must await before returning
- *   return c.json({ ok: true })
+ * @example
+ * // Hono
+ * const app = new Hono()
+ * app.use('*', async (c, next) => {
+ *   c.set('logger', vedatrace({ apiKey: env.VEDATRACE_API_KEY }).withContext(c.executionCtx))
+ *   await next()
  * })
- * ```
+ *
+ * @example
+ * // Manual flush (no context available)
+ * const logger = vedatrace({ apiKey: 'key' })
+ * logger.info('log before response')
+ * await logger.flush()
+ * return c.json({ ok: true })
  */
 
 export { VedaTraceBatcher } from "@/core/batcher"
@@ -42,6 +49,7 @@ export type {
 	RedactionConfig,
 	RuntimeType,
 	VedaTraceConfig,
+	VedaTraceEdgeContext,
 	VedaTraceLevel,
 	VedaTraceLog,
 	VedaTraceLoggerInterface,
@@ -59,17 +67,38 @@ export { detectRuntime, isEdgeRuntime } from "@/utils/runtime"
 
 import { VedaTraceBatcher } from "@/core/batcher"
 import { VedaTraceLogger } from "@/core/logger"
-import type { VedaTraceConfig, VedaTraceLoggerInterface } from "@/core/types"
+import type {
+	VedaTraceConfig,
+	VedaTraceEdgeContext,
+	VedaTraceLoggerInterface,
+} from "@/core/types"
 import type { HttpTransportConfig } from "@/transports"
 import { VedaTraceConsoleTransport, VedaTraceHttpTransport } from "@/transports"
 import { isEdgeRuntime } from "@/utils/runtime"
 
+/**
+ * Extended logger interface with context support for Cloudflare Workers
+ */
 export interface VedaTraceInstance extends VedaTraceLoggerInterface {
-	withExecutionContext(ctx: {
-		waitUntil(promise: Promise<unknown>): void
-	}): this
+	/** Attach execution context for waitUntil support */
+	withContext(ctx: VedaTraceEdgeContext): this
+
+	/** Check if context is attached */
+	hasContext(): boolean
+
+	/** Get current execution context */
+	getContext(): VedaTraceEdgeContext | undefined
 }
 
+/**
+ * Create a VedaTrace logger instance
+ *
+ * @example
+ * const logger = vedatrace({
+ *   apiKey: 'your-api-key',
+ *   service: 'my-service'
+ * })
+ */
 export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
 	const logger = new VedaTraceLogger(config)
 	const isEdge = isEdgeRuntime()
@@ -79,6 +108,9 @@ export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
 		if (config.endpoint) httpConfig.endpoint = config.endpoint
 
 		const httpTransport = new VedaTraceHttpTransport(httpConfig)
+
+		const shouldImmediateFlush =
+			config.immediateFlush ?? (isEdge && !config.executionContext)
 
 		const batcher = new VedaTraceBatcher(
 			[httpTransport],
@@ -92,7 +124,7 @@ export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
 			},
 			config.onError,
 			config.onSuccess,
-			config.immediateFlush ?? (isEdge && !config.executionContext),
+			shouldImmediateFlush,
 		)
 
 		logger.setBatcher(batcher)
@@ -110,6 +142,9 @@ export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
 	return logger as VedaTraceInstance
 }
 
+/**
+ * Create a console-only logger for development
+ */
 export function devVedatrace(
 	config: Omit<VedaTraceConfig, "apiKey" | "transports"> = {},
 ): VedaTraceLoggerInterface {
