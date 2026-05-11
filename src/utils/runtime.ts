@@ -61,11 +61,24 @@ export function detectRuntime(): RuntimeType {
 
 export function isEdgeRuntime(): boolean {
 	const runtime = detectRuntime()
-
 	return (
 		runtime === "cloudflare" ||
 		runtime === "deno" ||
 		runtime === "bun" ||
 		runtime === "edge"
 	)
+}
+
+export function isServerless(): boolean {
+	const runtime = detectRuntime()
+	return runtime === "cloudflare" || runtime === "edge"
+}
+
+export function isLongRunning(): boolean {
+	const runtime = detectRuntime()
+	return runtime === "node" || runtime === "bun" || runtime === "deno"
+}
+
+export function isBrowser(): boolean {
+	return detectRuntime() === "browser"
 }

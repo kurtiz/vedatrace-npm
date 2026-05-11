@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>VedaTrace Browser Demo</title>
+	<style>
+		body {
+			font-family: system-ui, -apple-system, sans-serif;
+			max-width: 800px;
+			margin: 50px auto;
+			padding: 20px;
+		}
+		button {
+			padding: 10px 20px;
+			margin: 5px;
+			cursor: pointer;
+		}
+		.log-entry {
+			padding: 8px;
+			margin: 4px 0;
+			border-radius: 4px;
+		}
+		.info { background: #e3f2fd; }
+		.warn { background: #fff3cd; }
+		.error { background: #f8d7da; }
+		#log-container { margin-top: 20px; }
+	</style>
+</head>
+<body>
+	<h1>VedaTrace Browser Demo</h1>
+	<p>Open DevTools Console to see logs. Navigate away or hide tab to trigger visibility flush.</p>
+
+	<div>
+		<button onclick="logInfo()">Log Info</button>
+		<button onclick="logWarn()">Log Warning</button>
+		<button onclick="logError()">Log Error</button>
+		<button onclick="logBatch()">Log 50 entries</button>
+	</div>
+
+	<div>
+		<h3>Log History</h3>
+		<div id="log-container"></div>
+	</div>
+
+	<script type="module">
+		import { vedatrace } from "https://esm.sh/vedatrace@0.1.9";
+
+		const logger = vedatrace({
+			apiKey: "YOUR_API_KEY",
+			service: "browser-demo",
+			debug: true,
+			batchSize: 10,
+			flushInterval: 2000,
+		});
+
+		logger.info("VedaTrace initialized in browser", {
+			userAgent: navigator.userAgent,
+			platform: navigator.platform,
+		});
+
+		window.logInfo = () => {
+			logger.info("User clicked: Log Info", { timestamp: Date.now() });
+			addLogEntry("info", "User clicked: Log Info");
+		};
+
+		window.logWarn = () => {
+			logger.warn("User clicked: Log Warning", { timestamp: Date.now() });
+			addLogEntry("warn", "User clicked: Log Warning");
+		};
+
+		window.logError = () => {
+			logger.error("User clicked: Log Error", {
+				timestamp: Date.now(),
+				simulated: true,
+			});
+			addLogEntry("error", "User clicked: Log Error");
+		};
+
+		window.logBatch = () => {
+			for (let i = 0; i < 50; i++) {
+				logger.debug(`Batch log ${i + 1}/50`, { index: i });
+			}
+			addLogEntry("info", "Logged 50 batch entries");
+		};
+
+		function addLogEntry(level, message) {
+			const container = document.getElementById("log-container");
+			const entry = document.createElement("div");
+			entry.className = `log-entry ${level}`;
+			entry.textContent = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}`;
+			container.prepend(entry);
+		}
+
+		// Monitor visibility changes
+		document.addEventListener("visibilitychange", () => {
+			console.log(`[VedaTrace] Visibility: ${document.visibilityState}`);
+			if (document.visibilityState === "hidden") {
+				console.log("[VedaTrace] Page becoming hidden - logs will be flushed");
+			}
+		});
+	</script>
+</body>
+</html>

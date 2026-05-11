@@ -1,18 +1,21 @@
 /**
  * HTTP transport for sending logs to VedaTrace ingestion endpoint
+ *
+ * Features:
+ * - Timeout support with AbortController
+ * - Retry on network failure
+ * - Keepalive support for browser final flush
  */
 
 import type { InternalLogEntry, VedaTraceTransport } from "../core/types"
 
 export interface HttpTransportConfig {
-	/** API key for authentication */
 	apiKey: string
-	/** Ingestion endpoint URL */
 	endpoint?: string
-	/** Request timeout in milliseconds */
 	timeout?: number
-	/** Additional headers */
 	headers?: Record<string, string>
+	/** Enable keepalive for browser final flush */
+	keepalive?: boolean
 }
 
 export class VedaTraceHttpTransport implements VedaTraceTransport {
@@ -21,12 +24,14 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 	private apiKey: string
 	private timeout: number
 	private headers: Record<string, string>
+	private keepalive: boolean
 
 	constructor(config: HttpTransportConfig) {
 		this.apiKey = config.apiKey
 		this.endpoint = config.endpoint ?? "https://ingest.vedatrace.dev/v1/logs"
 		this.timeout = config.timeout ?? 30000
 		this.headers = config.headers ?? {}
+		this.keepalive = config.keepalive ?? false
 	}
 
 	/** Send logs via HTTP POST */
@@ -54,6 +59,7 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 				},
 				body: JSON.stringify(payload),
 				signal: controller.signal,
+				keepalive: this.keepalive,
 			})
 
 			clearTimeout(timeoutId)
@@ -73,5 +79,38 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 			}
 			throw new Error(String(error))
 		}
+	}
+
+	/** Flush pending logs - called on page unload */
+	async flush(): Promise<void> {
+		// This is a no-op for HTTP transport since logs are already queued
+		// The batcher handles the actual sending
+		// Subclasses or wrappers could override this for special handling
+		return Promise.resolve()
+	}
+
+	/** Check if keepalive is enabled */
+	isKeepaliveEnabled(): boolean {
+		return this.keepalive
+	}
+
+	/** Enable/disable keepalive */
+	setKeepalive(enabled: boolean): void {
+		this.keepalive = enabled
+	}
+}
+
+/**
+ * Browser-safe HTTP transport that uses keepalive for final flush
+ */
+export class VedaTraceHttpTransportBrowser extends VedaTraceHttpTransport {
+	constructor(config: HttpTransportConfig) {
+		super({ ...config, keepalive: true })
+	}
+
+	async flush(): Promise<void> {
+		// Ensure keepalive is enabled for final flush
+		this.setKeepalive(true)
+		return super.flush()
 	}
 }

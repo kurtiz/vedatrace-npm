@@ -1,42 +1,27 @@
 /**
  * VedaTrace SDK - Universal JavaScript logging
  *
- * Framework-agnostic SDK with first-class Cloudflare Workers support.
- *
- * Key features:
- * - Automatic waitUntil() integration for Cloudflare Workers / Pages
- * - Fire-and-forget logging - SDK handles background flush lifecycle
- * - Edge-safe batching with debounced flushes
- * - Works with any framework (Hono, Fastify, Express, etc.) or raw Workers
- *
- * @example
- * // Raw Cloudflare Worker (recommended pattern)
- * export default {
- *   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
- *     const logger = vedatrace({
- *       apiKey: env.VEDATRACE_API_KEY,
- *       service: 'my-worker',
- *     }).withContext(ctx)
- *
- *     logger.info('Request received')
- *     return new Response('Hello')
- *   }
- * }
+ * Supports all JavaScript environments:
+ * - Cloudflare Workers / Pages: waitUntil() for background flush
+ * - Node.js: standard batching with process event handlers
+ * - Bun: standard batching with unref timers
+ * - Deno: standard batching with unref timers
+ * - Browser: batching with visibility lifecycle handling
+ * - Generic Edge: immediate flush fallback
  *
  * @example
- * // Hono
- * const app = new Hono()
- * app.use('*', async (c, next) => {
- *   c.set('logger', vedatrace({ apiKey: env.VEDATRACE_API_KEY }).withContext(c.executionCtx))
- *   await next()
- * })
+ * // Cloudflare Worker
+ * const logger = vedatrace({ apiKey: 'key', service: 'app' }).withContext(ctx)
  *
  * @example
- * // Manual flush (no context available)
- * const logger = vedatrace({ apiKey: 'key' })
- * logger.info('log before response')
- * await logger.flush()
- * return c.json({ ok: true })
+ * // Node.js / Express
+ * const logger = vedatrace({ apiKey: 'key', service: 'app' })
+ * // Automatic shutdown handlers via process.on()
+ *
+ * @example
+ * // Browser
+ * const logger = vedatrace({ apiKey: 'key', service: 'app' })
+ * // Automatic flush on visibilitychange / pagehide
  */
 
 export { VedaTraceBatcher } from "@/core/batcher"
@@ -61,9 +46,19 @@ export type {
 } from "@/transports/console"
 export { VedaTraceConsoleTransport } from "@/transports/console"
 export type { HttpTransportConfig } from "@/transports/http"
-export { VedaTraceHttpTransport } from "@/transports/http"
+export {
+	VedaTraceHttpTransport,
+	VedaTraceHttpTransportBrowser,
+} from "@/transports/http"
+export { BrowserLifecycle } from "@/utils/browser-lifecycle"
 export { redact } from "@/utils/redaction"
-export { detectRuntime, isEdgeRuntime } from "@/utils/runtime"
+export {
+	detectRuntime,
+	isBrowser,
+	isEdgeRuntime,
+	isLongRunning,
+	isServerless,
+} from "@/utils/runtime"
 
 import { VedaTraceBatcher } from "@/core/batcher"
 import { VedaTraceLogger } from "@/core/logger"
@@ -73,14 +68,22 @@ import type {
 	VedaTraceLoggerInterface,
 } from "@/core/types"
 import type { HttpTransportConfig } from "@/transports"
-import { VedaTraceConsoleTransport, VedaTraceHttpTransport } from "@/transports"
-import { isEdgeRuntime } from "@/utils/runtime"
+import {
+	VedaTraceConsoleTransport,
+	VedaTraceHttpTransport,
+	VedaTraceHttpTransportBrowser,
+} from "@/transports"
+import { BrowserLifecycle } from "@/utils/browser-lifecycle"
+import {
+	detectRuntime,
+	isBrowser,
+	isLongRunning,
+	isServerless,
+} from "@/utils/runtime"
 
-/**
- * Extended logger interface with context support for Cloudflare Workers
- */
+/** Extended logger interface with context support for Cloudflare Workers */
 export interface VedaTraceInstance extends VedaTraceLoggerInterface {
-	/** Attach execution context for waitUntil support */
+	/** Attach execution context for waitUntil support (Cloudflare Workers) */
 	withContext(ctx: VedaTraceEdgeContext): this
 
 	/** Check if context is attached */
@@ -90,52 +93,105 @@ export interface VedaTraceInstance extends VedaTraceLoggerInterface {
 	getContext(): VedaTraceEdgeContext | undefined
 }
 
+/** Runtime-specific flush interval defaults */
+const RUNTIME_FLUSH_INTERVALS: Record<string, number> = {
+	node: 3000,
+	bun: 3000,
+	deno: 3000,
+	browser: 3000,
+	cloudflare: 1000,
+	edge: 1000,
+}
+
 /**
  * Create a VedaTrace logger instance
  *
- * @example
- * const logger = vedatrace({
- *   apiKey: 'your-api-key',
- *   service: 'my-service'
- * })
+ * Handles all runtimes with environment-appropriate strategies:
+ * 1. Cloudflare/Edge: immediate flush with waitUntil if context available
+ * 2. Node/Bun/Deno: standard batching with process/unref timers
+ * 3. Browser: batching with visibility lifecycle handlers
  */
 export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
+	const runtime = detectRuntime()
 	const logger = new VedaTraceLogger(config)
-	const isEdge = isEdgeRuntime()
 
+	// Only set up transports if apiKey is provided without custom transports
 	if (config.apiKey && (!config.transports || config.transports.length === 0)) {
-		const httpConfig: HttpTransportConfig = { apiKey: config.apiKey }
+		const isBrowserEnv = isBrowser()
+		const isServerlessEnv = isServerless()
+		const isLongRunningEnv = isLongRunning()
+
+		// Select appropriate HTTP transport based on environment
+		const HttpTransport = isBrowserEnv
+			? VedaTraceHttpTransportBrowser
+			: VedaTraceHttpTransport
+
+		const httpConfig: HttpTransportConfig = {
+			apiKey: config.apiKey,
+			keepalive: isBrowserEnv,
+		}
 		if (config.endpoint) httpConfig.endpoint = config.endpoint
 
-		const httpTransport = new VedaTraceHttpTransport(httpConfig)
+		const httpTransport = new HttpTransport(httpConfig)
 
-		const shouldImmediateFlush =
-			config.immediateFlush ?? (isEdge && !config.executionContext)
+		// Determine batching strategy based on runtime
+		let immediateFlush = config.immediateFlush ?? false
+		let shouldUnrefTimer = false
+
+		if (isServerlessEnv) {
+			// Cloudflare / generic edge: use immediate flush if no context
+			immediateFlush = config.immediateFlush ?? !config.executionContext
+		} else if (isLongRunningEnv) {
+			// Node/Bun/Deno: standard batching with unref
+			immediateFlush = config.immediateFlush ?? false
+			shouldUnrefTimer = true
+		} else if (isBrowserEnv) {
+			// Browser: standard batching with lifecycle handlers
+			immediateFlush = config.immediateFlush ?? false
+		}
+
+		const flushInterval =
+			config.flushInterval ?? RUNTIME_FLUSH_INTERVALS[runtime] ?? 3000
 
 		const batcher = new VedaTraceBatcher(
 			[httpTransport],
 			{
 				batchSize: config.batchSize ?? 100,
-				flushInterval: config.flushInterval ?? (isEdge ? 1000 : 5000),
+				flushInterval,
 				maxRetries: config.maxRetries ?? 3,
 				retryDelay: config.retryDelay ?? 1000,
-				unrefTimer: config.unrefTimer,
+				unrefTimer: config.unrefTimer ?? shouldUnrefTimer,
 				executionContext: config.executionContext,
 			},
 			config.onError,
 			config.onSuccess,
-			shouldImmediateFlush,
+			immediateFlush,
 		)
 
 		logger.setBatcher(batcher)
 
-		if (typeof process !== "undefined") {
+		// Attach process handlers for Node.js / Bun / Deno
+		if (typeof process !== "undefined" && isLongRunningEnv) {
 			const flushLogs = async (): Promise<void> => {
 				await batcher.flush()
 			}
 			process.on("beforeExit", flushLogs)
 			process.on("SIGTERM", flushLogs)
 			process.on("SIGINT", flushLogs)
+		}
+
+		// Attach browser lifecycle handlers
+		if (isBrowserEnv) {
+			const lifecycle = new BrowserLifecycle({
+				transports: [httpTransport],
+				flush: () => batcher.flush(),
+				debug: config.debug,
+			})
+			lifecycle.attach()
+
+			// Store lifecycle reference for cleanup
+			;(logger as unknown as { _lifecycle?: BrowserLifecycle })._lifecycle =
+				lifecycle
 		}
 	}
 

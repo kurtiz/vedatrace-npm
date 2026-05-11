@@ -1,0 +1,11 @@
+{
+	"name": "vedatrace-deno-example",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"start": "deno run --allow-net --allow-env src/index.ts"
+	},
+	"imports": {
+		"@std/http": "jsr:@std/http@^1"
+	}
+}
