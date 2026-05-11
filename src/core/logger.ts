@@ -209,14 +209,8 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		}
 	}
 
-	/** Detect runtime environment (legacy, kept for compatibility) */
+	/** Detect runtime environment - use unified detection */
 	private detectEnvironment(): string {
-		if (typeof globalThis !== "undefined" && "navigator" in globalThis) {
-			return "browser"
-		}
-		if (typeof process !== "undefined" && process.versions?.node) {
-			return "node"
-		}
-		return "edge"
+		return detectRuntime()
 	}
 }

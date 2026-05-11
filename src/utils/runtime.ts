@@ -12,48 +12,42 @@ export type RuntimeType =
  */
 
 export function detectRuntime(): RuntimeType {
-	const g = globalThis as any
-
-	// --- 1. Deno (very reliable) ---
-	if (typeof g.Deno !== "undefined" && g.Deno?.version?.deno) {
-		return "deno"
-	}
-
-	// --- 2. Bun (very reliable) ---
-	if (typeof g.Bun !== "undefined") {
-		return "bun"
-	}
-
-	// --- 3. Cloudflare Workers (multiple signals) ---
-	// Avoid relying ONLY on userAgent
+	// Cloudflare Workers - check navigator FIRST
+	// TanStack Start polyfills process.versions.node, so we need this check first
 	if (
-		typeof g.WebSocketPair !== "undefined" || // CF-specific
-		(typeof navigator !== "undefined" &&
-			navigator.userAgent === "Cloudflare-Workers")
+		typeof navigator !== "undefined" &&
+		navigator.userAgent === "Cloudflare-Workers"
 	) {
 		return "cloudflare"
 	}
 
-	// --- 4. Node.js (avoid false positives from polyfills) ---
-	if (
-		typeof process !== "undefined" &&
-		process.versions?.node &&
-		!process.versions?.bun && // exclude Bun
-		!process.versions?.deno // defensive (rare)
-	) {
+	// Deno
+	const g = globalThis as Record<string, unknown> | undefined
+	if (g?.Deno && (g.Deno as { version?: { deno?: string } }).version?.deno) {
+		return "deno"
+	}
+
+	// Bun
+	if (g?.Bun) {
+		return "bun"
+	}
+
+	// Cloudflare Workers (fallback - WebSocketPair is Workers-specific)
+	if (typeof g?.WebSocketPair !== "undefined") {
+		return "cloudflare"
+	}
+
+	// Node.js
+	if (typeof process !== "undefined" && process.versions?.node) {
 		return "node"
 	}
 
-	// --- 5. Browser ---
+	// Browser
 	if (typeof window !== "undefined" && typeof document !== "undefined") {
 		return "browser"
 	}
 
-	// --- 6. Generic Edge runtime (Vercel Edge, etc.) ---
-	// These usually have:
-	// - no process
-	// - no window
-	// - fetch available
+	// Generic Edge runtime
 	if (
 		typeof fetch !== "undefined" &&
 		typeof window === "undefined" &&
@@ -62,7 +56,6 @@ export function detectRuntime(): RuntimeType {
 		return "edge"
 	}
 
-	// --- Fallback ---
 	return "edge"
 }
 
