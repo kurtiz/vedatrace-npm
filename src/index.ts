@@ -62,11 +62,7 @@ export {
 
 import { VedaTraceBatcher } from "@/core/batcher"
 import { VedaTraceLogger } from "@/core/logger"
-import type {
-	VedaTraceConfig,
-	VedaTraceEdgeContext,
-	VedaTraceLoggerInterface,
-} from "@/core/types"
+import type { VedaTraceConfig, VedaTraceLoggerInterface } from "@/core/types"
 import type { HttpTransportConfig } from "@/transports"
 import {
 	VedaTraceConsoleTransport,
@@ -80,18 +76,6 @@ import {
 	isLongRunning,
 	isServerless,
 } from "@/utils/runtime"
-
-/** Extended logger interface with context support for Cloudflare Workers */
-export interface VedaTraceInstance extends VedaTraceLoggerInterface {
-	/** Attach execution context for waitUntil support (Cloudflare Workers) */
-	withContext(ctx: VedaTraceEdgeContext): this
-
-	/** Check if context is attached */
-	hasContext(): boolean
-
-	/** Get current execution context */
-	getContext(): VedaTraceEdgeContext | undefined
-}
 
 /** Runtime-specific flush interval defaults */
 const RUNTIME_FLUSH_INTERVALS: Record<string, number> = {
@@ -111,7 +95,9 @@ const RUNTIME_FLUSH_INTERVALS: Record<string, number> = {
  * 2. Node/Bun/Deno: standard batching with process/unref timers
  * 3. Browser: batching with visibility lifecycle handlers
  */
-export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
+export function vedatrace(
+	config: VedaTraceConfig = {},
+): VedaTraceLoggerInterface {
 	const runtime = detectRuntime()
 	const logger = new VedaTraceLogger(config)
 
@@ -162,9 +148,9 @@ export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
 				retryDelay: config.retryDelay ?? 1000,
 				unrefTimer: config.unrefTimer ?? shouldUnrefTimer,
 				executionContext: config.executionContext,
+				onError: config.onError,
+				onSuccess: config.onSuccess,
 			},
-			config.onError,
-			config.onSuccess,
 			immediateFlush,
 		)
 
@@ -195,7 +181,7 @@ export function vedatrace(config: VedaTraceConfig = {}): VedaTraceInstance {
 		}
 	}
 
-	return logger as VedaTraceInstance
+	return logger as VedaTraceLoggerInterface
 }
 
 /**

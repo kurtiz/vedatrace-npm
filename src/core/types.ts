@@ -93,6 +93,8 @@ export interface BatcherConfig {
 	retryDelay: number
 	unrefTimer?: boolean
 	executionContext?: VedaTraceEdgeContext
+	onError?: (error: Error) => void
+	onSuccess?: () => void
 }
 
 export interface VedaTraceLoggerInterface {
@@ -106,6 +108,15 @@ export interface VedaTraceLoggerInterface {
 	stop(): void
 	start(): void
 	runtime: RuntimeType
+
+	/** Attach execution context for waitUntil support (Cloudflare Workers) */
+	withContext(ctx: VedaTraceEdgeContext): this
+
+	/** Check if context is attached */
+	hasContext(): boolean
+
+	/** Get current execution context */
+	getContext(): VedaTraceEdgeContext | undefined
 }
 
 /** Extended logger interface with context support */

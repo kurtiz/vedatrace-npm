@@ -29,8 +29,6 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			| "maxRetries"
 			| "retryDelay"
 			| "endpoint"
-			| "onError"
-			| "onSuccess"
 			| "debug"
 			| "immediateFlush"
 			| "unrefTimer"
@@ -40,7 +38,7 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 		apiKey?: string
 		environment?: string
 	}
-	private childDefaults: LogMetadata
+	private readonly childDefaults: LogMetadata
 	private _context: VedaTraceEdgeContext | undefined
 
 	constructor(config: VedaTraceConfig = {}, childDefaults: LogMetadata = {}) {
@@ -56,11 +54,9 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 			flushInterval: config.flushInterval ?? 5000,
 			maxRetries: config.maxRetries ?? 3,
 			retryDelay: config.retryDelay ?? 1000,
-			onError: config.onError,
-			onSuccess: config.onSuccess,
 			debug: config.debug ?? false,
 			immediateFlush: config.immediateFlush ?? false,
-			unrefTimer: config.unrefTimer,
+			unrefTimer: config.unrefTimer ?? false,
 		}
 
 		if (!config.disabled) {
@@ -79,13 +75,13 @@ export class VedaTraceLogger implements VedaTraceLoggerInterface {
 				retryDelay: this.config.retryDelay,
 				unrefTimer: this.config.unrefTimer,
 				executionContext: this._context,
+				onError: config.onError,
+				onSuccess: config.onSuccess,
 			}
 
 			this.batcher = new VedaTraceBatcher(
 				transports,
 				batcherConfig,
-				this.config.onError,
-				this.config.onSuccess,
 				this.config.immediateFlush,
 			)
 		}

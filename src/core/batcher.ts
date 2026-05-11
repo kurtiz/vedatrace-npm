@@ -7,6 +7,7 @@
  * 3. Fire-and-forget flush wrapped in ctx.waitUntil() when context is available
  * 4. Debounced flush to avoid excessive network calls
  * 5. Automatic flush on each log entry when context is present
+ * 6. All callbacks moved into BatcherConfig for cleaner API
  */
 
 import type {
@@ -27,8 +28,6 @@ export class VedaTraceBatcher {
 	constructor(
 		private transports: VedaTraceTransport[],
 		private config: BatcherConfig,
-		private onError?: (error: Error) => void,
-		private onSuccess?: (() => void) | undefined,
 		private immediateFlush = false,
 	) {
 		this.context = config.executionContext
@@ -68,8 +67,8 @@ export class VedaTraceBatcher {
 		this.flushDebounceTimer = setTimeout(() => {
 			this.flushDebounceTimer = null
 			this.flush().catch((error) => {
-				if (this.onError) {
-					this.onError(
+				if (this.config.onError) {
+					this.config.onError(
 						error instanceof Error ? error : new Error(String(error)),
 					)
 				} else {
@@ -134,15 +133,17 @@ export class VedaTraceBatcher {
 				`Failed to send logs after ${this.config.maxRetries} retries: ${errors.map((e) => e.message).join(", ")}`,
 			)
 
-			if (this.onError) {
-				this.onError(combinedError)
+			if (this.config.onError) {
+				this.config.onError(combinedError)
 			} else {
 				console.error("[VedaTrace]", combinedError.message)
 			}
 			return
 		}
 
-		this.onSuccess?.()
+		if (this.config.onSuccess) {
+			this.config.onSuccess()
+		}
 	}
 
 	private startFlushTimer(): void {
@@ -153,8 +154,8 @@ export class VedaTraceBatcher {
 		this.flushTimer = setInterval(() => {
 			if (this.queue.length > 0) {
 				this.flush().catch((error) => {
-					if (this.onError) {
-						this.onError(
+					if (this.config.onError) {
+						this.config.onError(
 							error instanceof Error ? error : new Error(String(error)),
 						)
 					} else {
