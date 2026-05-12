@@ -1,5 +1,11 @@
 # vedatrace
 
+## 0.2.1
+
+### Patch Changes
+
+- fix: minor bug fixes and improvements
+
 ## 0.2.0
 
 ### Minor Changes
