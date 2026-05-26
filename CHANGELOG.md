@@ -1,5 +1,45 @@
 # vedatrace
 
+## 0.3.0
+
+### Minor Changes
+
+- feat: add `waitUntil` config option for reliable Cloudflare Workers log delivery
+
+  Cloudflare Workers terminate execution immediately after returning a `Response`,
+  cancelling any in-flight HTTP requests — including log delivery. This release
+  adds the `waitUntil` config option so VedaTrace can extend the worker's
+  lifetime until the flush completes.
+
+  ```ts
+  import { waitUntil } from 'cloudflare:workers'
+
+  const logger = vedatrace({
+    apiKey: env.API_KEY,
+    service: 'my-worker',
+    waitUntil,
+  })
+
+  // Logs flush automatically — no manual .flush() needed
+  logger.info('Hello')
+  ```
+
+  Three delivery modes are now available:
+
+  - **`waitUntil` config** (recommended): pass `import { waitUntil } from 'cloudflare:workers'` — flush happens automatically via `queueMicrotask` + `waitUntil`
+  - **Execution context**: call `logger.withContext(ctx)` to attach the Cloudflare `ExecutionContext` — VedaTrace calls `ctx.waitUntil()` internally
+  - **Manual fallback**: `ctx.waitUntil(logger.flush())` for explicit control
+
+- feat: add `immediateFlush` config option to bypass batching and flush on every log call
+- feat: add `debug` config option for verbose SDK operation logging
+- feat: enable `keepalive: true` on HTTP transport in serverless environments (was browser-only)
+- feat: add fallback Node.js process handlers (`beforeExit`, `SIGTERM`, `SIGINT`) when runtime is misidentified as `cloudflare` due to navigator polyfill (e.g. TanStack Start dev)
+
+### Patch Changes
+
+- fix: replace `setTimeout` with `queueMicrotask` in debounced flush to ensure flush runs before handler returns
+- fix: guard `context.waitUntil()` call with `typeof` check to prevent `TypeError` when TanStack Start's generic context is used
+
 ## 0.2.1
 
 ### Patch Changes
