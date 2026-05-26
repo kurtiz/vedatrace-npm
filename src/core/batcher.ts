@@ -83,7 +83,7 @@ export class VedaTraceBatcher {
 	/** Flush logs to all transports with waitUntil protection */
 	async flush(): Promise<void> {
 		if (this.isFlushing) {
-			return this.pendingFlush ?? Promise.resolve()
+			return this.pendingFlush ?? (await Promise.resolve())
 		}
 
 		if (this.queue.length === 0) {
