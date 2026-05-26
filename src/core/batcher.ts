@@ -1,13 +1,10 @@
 /**
  * VedaTrace Batcher - Context-Aware for Cloudflare Workers
  *
- * Key features:
- * 1. Stores EdgeContext for waitUntil() integration
- * 2. setContext() method for post-initialization context attachment
- * 3. Fire-and-forget flush wrapped in ctx.waitUntil() when context is available
- * 4. Debounced flush via queueMicrotask for edge/serverless reliability
- * 5. Automatic flush on each log entry when context is present
- * 6. All callbacks moved into BatcherConfig for cleaner API
+ * Three flush modes:
+ * 1. Reliable mode (context or waitUntilFn): debounced flush + waitUntil for guaranteed delivery
+ * 2. Immediate mode: flush() called directly from add() during handler execution
+ * 3. Batch mode: periodic/batch-size flush for long-running environments
  */
 
 import type {
@@ -24,6 +21,7 @@ export class VedaTraceBatcher {
 	private isFlushing = false
 	private pendingFlush: Promise<void> | null = null
 	private context: VedaTraceEdgeContext | undefined
+	private waitUntilFn: ((promise: Promise<unknown>) => void) | undefined
 
 	constructor(
 		private transports: VedaTraceTransport[],
@@ -31,34 +29,39 @@ export class VedaTraceBatcher {
 		private immediateFlush = false,
 	) {
 		this.context = config.executionContext
+		this.waitUntilFn = config.waitUntil
 	}
 
-	/** Attach execution context after initialization */
 	setContext(ctx: VedaTraceEdgeContext): void {
 		this.context = ctx
 	}
 
-	/** Get current context */
 	getContext(): VedaTraceEdgeContext | undefined {
 		return this.context
 	}
 
-	/** Add log to queue with context-aware flush */
 	add(log: InternalLogEntry): void {
 		this.queue.push(log)
 
-		if (!this.flushTimer && !this.immediateFlush) {
+		if (this.context || this.waitUntilFn) {
+			this.debouncedFlush()
+			return
+		}
+
+		if (this.immediateFlush) {
+			this.flush()
+			return
+		}
+
+		if (!this.flushTimer) {
 			this.startFlushTimer()
 		}
 
-		if (this.immediateFlush || this.context) {
-			this.debouncedFlush()
-		} else if (this.queue.length >= this.config.batchSize) {
+		if (this.queue.length >= this.config.batchSize) {
 			this.flush()
 		}
 	}
 
-	/** Debounced flush - batches rapid-fire log calls within the same sync execution */
 	private debouncedFlush(): void {
 		if (this.flushQueued) return
 
@@ -80,7 +83,6 @@ export class VedaTraceBatcher {
 		})
 	}
 
-	/** Flush logs to all transports with waitUntil protection */
 	async flush(): Promise<void> {
 		if (this.isFlushing) {
 			return this.pendingFlush ?? (await Promise.resolve())
@@ -103,6 +105,8 @@ export class VedaTraceBatcher {
 
 		if (this.context && typeof this.context.waitUntil === "function") {
 			this.context.waitUntil(flushPromise)
+		} else if (typeof this.waitUntilFn === "function") {
+			this.waitUntilFn(flushPromise)
 		}
 
 		return flushPromise

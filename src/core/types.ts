@@ -47,6 +47,13 @@ export interface VedaTraceConfig {
 
 	/** Cloudflare Workers ExecutionContext - enables waitUntil support */
 	executionContext?: VedaTraceEdgeContext
+
+	/**
+	 * Global waitUntil function (e.g. from "cloudflare:workers").
+	 * When provided, the SDK uses the reliable debounced-flush+waitUntil path
+	 * instead of fire-and-forget, ensuring logs complete before worker termination.
+	 */
+	waitUntil?: (promise: Promise<unknown>) => void
 }
 
 export interface RedactionConfig {
@@ -95,6 +102,8 @@ export interface BatcherConfig {
 	executionContext?: VedaTraceEdgeContext
 	onError?: (error: Error) => void
 	onSuccess?: () => void
+	debug?: boolean
+	waitUntil?: (promise: Promise<unknown>) => void
 }
 
 export interface VedaTraceLoggerInterface {

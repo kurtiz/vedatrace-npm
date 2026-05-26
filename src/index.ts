@@ -114,7 +114,7 @@ export function vedatrace(
 
 		const httpConfig: HttpTransportConfig = {
 			apiKey: config.apiKey,
-			keepalive: isBrowserEnv,
+			keepalive: isBrowserEnv || isServerlessEnv,
 		}
 		if (config.endpoint) httpConfig.endpoint = config.endpoint
 
@@ -150,6 +150,8 @@ export function vedatrace(
 				executionContext: config.executionContext,
 				onError: config.onError,
 				onSuccess: config.onSuccess,
+				debug: config.debug,
+				waitUntil: config.waitUntil,
 			},
 			immediateFlush,
 		)
