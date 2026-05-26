@@ -5,7 +5,7 @@
  * 1. Stores EdgeContext for waitUntil() integration
  * 2. setContext() method for post-initialization context attachment
  * 3. Fire-and-forget flush wrapped in ctx.waitUntil() when context is available
- * 4. Debounced flush to avoid excessive network calls
+ * 4. Debounced flush via queueMicrotask for edge/serverless reliability
  * 5. Automatic flush on each log entry when context is present
  * 6. All callbacks moved into BatcherConfig for cleaner API
  */
@@ -20,7 +20,7 @@ import type {
 export class VedaTraceBatcher {
 	private queue: InternalLogEntry[] = []
 	private flushTimer: ReturnType<typeof setInterval> | null = null
-	private flushDebounceTimer: ReturnType<typeof setTimeout> | null = null
+	private flushQueued = false
 	private isFlushing = false
 	private pendingFlush: Promise<void> | null = null
 	private context: VedaTraceEdgeContext | undefined
@@ -58,14 +58,13 @@ export class VedaTraceBatcher {
 		}
 	}
 
-	/** Debounced flush - prevents rapid-fire flushes */
+	/** Debounced flush - batches rapid-fire log calls within the same sync execution */
 	private debouncedFlush(): void {
-		if (this.flushDebounceTimer) {
-			clearTimeout(this.flushDebounceTimer)
-		}
+		if (this.flushQueued) return
 
-		this.flushDebounceTimer = setTimeout(() => {
-			this.flushDebounceTimer = null
+		this.flushQueued = true
+		queueMicrotask(() => {
+			this.flushQueued = false
 			this.flush().catch((error) => {
 				if (this.config.onError) {
 					this.config.onError(
@@ -78,7 +77,7 @@ export class VedaTraceBatcher {
 					)
 				}
 			})
-		}, 100)
+		})
 	}
 
 	/** Flush logs to all transports with waitUntil protection */
@@ -102,7 +101,7 @@ export class VedaTraceBatcher {
 
 		this.pendingFlush = flushPromise
 
-		if (this.context) {
+		if (this.context && typeof this.context.waitUntil === "function") {
 			this.context.waitUntil(flushPromise)
 		}
 
@@ -178,10 +177,7 @@ export class VedaTraceBatcher {
 			clearInterval(this.flushTimer)
 			this.flushTimer = null
 		}
-		if (this.flushDebounceTimer) {
-			clearTimeout(this.flushDebounceTimer)
-			this.flushDebounceTimer = null
-		}
+		this.flushQueued = false
 	}
 
 	start(): void {

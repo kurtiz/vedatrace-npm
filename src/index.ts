@@ -157,7 +157,11 @@ export function vedatrace(
 		logger.setBatcher(batcher)
 
 		// Attach process handlers for Node.js / Bun / Deno
-		if (typeof process !== "undefined" && isLongRunningEnv) {
+		// Also attach when process.versions.node exists (fallback for runtimes like
+		// TanStack Start dev that polyfill navigator and get misidentified as "cloudflare")
+		const isNodeRuntime =
+			typeof process !== "undefined" && process.versions?.node
+		if (typeof process !== "undefined" && (isLongRunningEnv || isNodeRuntime)) {
 			const flushLogs = async (): Promise<void> => {
 				await batcher.flush()
 			}
