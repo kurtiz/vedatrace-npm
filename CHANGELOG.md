@@ -4,6 +4,12 @@
 
 ### Minor Changes
 
+- 0edc65c: feat: waitUntil config option for reliable Cloudflare Workers log delivery
+
+## 0.3.0
+
+### Minor Changes
+
 - feat: add `waitUntil` config option for reliable Cloudflare Workers log delivery
 
   Cloudflare Workers terminate execution immediately after returning a `Response`,
@@ -12,16 +18,16 @@
   lifetime until the flush completes.
 
   ```ts
-  import { waitUntil } from 'cloudflare:workers'
+  import { waitUntil } from "cloudflare:workers";
 
   const logger = vedatrace({
     apiKey: env.API_KEY,
-    service: 'my-worker',
+    service: "my-worker",
     waitUntil,
-  })
+  });
 
   // Logs flush automatically — no manual .flush() needed
-  logger.info('Hello')
+  logger.info("Hello");
   ```
 
   Three delivery modes are now available:
