@@ -11,4 +11,4 @@
  * so it was always undefined for consumers, and the bare `process` reference
  * survived bundling and threw a ReferenceError in browsers.
  */
-export const SDK_VERSION = "0.3.0"
+export const SDK_VERSION = "0.3.1"
