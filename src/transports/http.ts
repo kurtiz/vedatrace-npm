@@ -3,11 +3,22 @@
  *
  * Features:
  * - Timeout support with AbortController
- * - Retry on network failure
- * - Keepalive support for browser final flush
+ * - Status-aware errors so the batcher can tell retryable from permanent
+ * - Keepalive for the browser's final flush, with automatic splitting to stay
+ *   under the 64 KiB body limit the fetch spec puts on keepalive requests
  */
 
+import { parseRetryAfter, VedaTraceTransportError } from "../core/errors"
 import type { InternalLogEntry, VedaTraceTransport } from "../core/types"
+
+/**
+ * The fetch spec caps the total body of in-flight keepalive requests at 64 KiB,
+ * and a request over the limit is rejected outright. We split well below it so
+ * a batch that only matters during page unload actually leaves the browser.
+ */
+const KEEPALIVE_MAX_BYTES = 56 * 1024
+
+const encoder = new TextEncoder()
 
 export interface HttpTransportConfig {
 	apiKey: string
@@ -36,18 +47,32 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 
 	/** Send logs via HTTP POST */
 	async send(logs: InternalLogEntry[]): Promise<void> {
+		if (logs.length === 0) return
+
+		const body = JSON.stringify(logs.map(toWirePayload))
+
+		// Keepalive requests over the spec's body limit are rejected, so halve the
+		// batch until each piece fits. A single log that is still too large goes
+		// out without keepalive: outside unload that succeeds normally, and during
+		// unload an oversized log was never going to make it either way.
+		if (this.keepalive && encoder.encode(body).length > KEEPALIVE_MAX_BYTES) {
+			if (logs.length > 1) {
+				const mid = Math.ceil(logs.length / 2)
+				// Recurse so each half is re-measured: one split is not enough for a
+				// batch several times over the limit.
+				await this.send(logs.slice(0, mid))
+				await this.send(logs.slice(mid))
+				return
+			}
+			return this.post(body, false)
+		}
+
+		return this.post(body, this.keepalive)
+	}
+
+	private async post(body: string, keepalive: boolean): Promise<void> {
 		const controller = new AbortController()
 		const timeoutId = setTimeout(() => controller.abort(), this.timeout)
-
-		const payload = logs.map((log) => ({
-			level: log.level,
-			message: log.message,
-			service: log.service,
-			timestamp: log.timestamp
-				? new Date(log.timestamp).toISOString()
-				: undefined,
-			metadata: log.metadata,
-		}))
 
 		try {
 			const response = await fetch(this.endpoint, {
@@ -57,35 +82,44 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 					"X-API-Key": this.apiKey,
 					...this.headers,
 				},
-				body: JSON.stringify(payload),
+				body,
 				signal: controller.signal,
-				keepalive: this.keepalive,
+				keepalive,
 			})
 
-			clearTimeout(timeoutId)
-
 			if (!response.ok) {
-				const text = await response.text()
-				throw new Error(`HTTP ${response.status}: ${text}`)
+				const text = await response.text().catch(() => "")
+				throw VedaTraceTransportError.fromStatus(
+					response.status,
+					text,
+					parseRetryAfter(response.headers.get("Retry-After")),
+				)
 			}
 		} catch (error) {
-			clearTimeout(timeoutId)
+			if (error instanceof VedaTraceTransportError) throw error
 
-			if (error instanceof Error) {
-				if (error.name === "AbortError") {
-					throw new Error(`Request timeout after ${this.timeout}ms`)
-				}
-				throw error
+			if (error instanceof Error && error.name === "AbortError") {
+				throw new VedaTraceTransportError(
+					`Request timeout after ${this.timeout}ms`,
+					{ retryable: true },
+				)
 			}
-			throw new Error(String(error))
+
+			// Network-level failures (DNS, offline, connection reset) are transient.
+			throw new VedaTraceTransportError(
+				error instanceof Error ? error.message : String(error),
+				{ retryable: true },
+			)
+		} finally {
+			clearTimeout(timeoutId)
 		}
 	}
 
-	/** Flush pending logs - called on page unload */
+	/**
+	 * No-op: this transport holds no buffer of its own. The batcher owns the
+	 * queue and calls send() directly, including on the browser's final flush.
+	 */
 	async flush(): Promise<void> {
-		// This is a no-op for HTTP transport since logs are already queued
-		// The batcher handles the actual sending
-		// Subclasses or wrappers could override this for special handling
 		return Promise.resolve()
 	}
 
@@ -100,17 +134,30 @@ export class VedaTraceHttpTransport implements VedaTraceTransport {
 	}
 }
 
+/** Shape the ingestion endpoint accepts. */
+function toWirePayload(log: InternalLogEntry) {
+	return {
+		level: log.level,
+		message: log.message,
+		service: log.service,
+		timestamp: log.timestamp
+			? new Date(log.timestamp).toISOString()
+			: undefined,
+		metadata: log.metadata,
+	}
+}
+
 /**
- * Browser-safe HTTP transport that uses keepalive for final flush
+ * Browser HTTP transport: keepalive is always on so the final flush survives
+ * the page going away.
+ *
+ * Note on `navigator.sendBeacon`: it cannot set request headers, and the
+ * ingestion endpoint authenticates with `X-API-Key`, so a beacon would arrive
+ * unauthenticated. Keepalive fetch is the only mechanism that carries both the
+ * credentials and the payload past unload.
  */
 export class VedaTraceHttpTransportBrowser extends VedaTraceHttpTransport {
 	constructor(config: HttpTransportConfig) {
 		super({ ...config, keepalive: true })
-	}
-
-	async flush(): Promise<void> {
-		// Ensure keepalive is enabled for final flush
-		this.setKeepalive(true)
-		return super.flush()
 	}
 }

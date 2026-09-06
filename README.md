@@ -32,7 +32,7 @@ bun add vedatrace
 import { vedatrace } from 'vedatrace'
 
 const logger = vedatrace({
-  apiKey: 'your-api-key',
+  apiKey: 'your-api-key',   // or set VEDATRACE_API_KEY in the environment
   service: 'my-service'
 })
 
@@ -65,12 +65,6 @@ const logger = vedatrace({
   // Retry
   maxRetries: 3,
   retryDelay: 1000,
-  
-  // Redaction
-  redaction: {
-    paths: ['password', 'token'],
-    mask: '[REDACTED]'
-  },
   
   // Advanced
   immediateFlush: false,           // Flush on each log (dev mode, edge runtimes)
@@ -250,6 +244,8 @@ The SDK timer uses `unref()` so the process will exit automatically when there's
 ### Error Handling
 
 ```typescript
+import { vedatrace, VedaTraceTransportError } from 'vedatrace'
+
 const logger = vedatrace({
   apiKey: '...',
   onError: (err) => {
@@ -261,6 +257,50 @@ const logger = vedatrace({
 // SDK never throws - errors are logged to onError
 logger.error('Critical error', { stack: err.stack })
 ```
+
+Transport failures arrive as `VedaTraceTransportError`, carrying `status`,
+`retryable`, `fatal` and `retryAfterMs` so you can tell a bad key from a blip:
+
+```typescript
+onError: (err) => {
+  if (err instanceof VedaTraceTransportError && err.fatal) {
+    // 401 / 403 - the key or its allowed origins are wrong
+  }
+}
+```
+
+### Retry behaviour
+
+Failed batches retry with backoff on `408`, `425`, `429` and `5xx`, and on
+network errors. A `Retry-After` header takes precedence over the local backoff.
+Other 4xx responses are reported once and not retried, since a retry cannot
+change the outcome.
+
+A `401` or `403` **halts the logger**: the credentials will fail identically on
+every future batch, so the SDK reports once through `onError` and stops instead
+of spending a doomed request per flush. Fix the key (or the key's allowed
+origins in your project settings) and call `logger.start()` to resume.
+
+## Environment variables
+
+| Variable             | Purpose                                              |
+| -------------------- | ---------------------------------------------------- |
+| `VEDATRACE_API_KEY`  | Used when `apiKey` is not passed to `vedatrace()`.    |
+
+Reading it is guarded, so it is safe in browsers and in Workers without
+`nodejs_compat` - those simply see no key and the logger stays inert.
+
+## Browser usage
+
+In the browser the SDK batches and flushes on `visibilitychange` and `pagehide`,
+using `keepalive` so the final request outlives the page. It deliberately does
+**not** register `beforeunload` or `unload`, either of which would make the host
+page ineligible for the back/forward cache.
+
+> **Your API key ships in the bundle.** Anyone can read it out of your JavaScript.
+> Restrict browser keys to your own origins under **Project settings -> API keys ->
+> Allowed origins**, and use a separate, unrestricted key for your backend. A key
+> with no origin list accepts logs from anywhere.
 
 ## Log Schema
 
@@ -327,6 +367,12 @@ Get the detected runtime environment. Returns: `'node' | 'browser' | 'cloudflare
 ```typescript
 console.log(logger.runtime) // 'cloudflare' when running in Workers
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md). Note that commit messages drive the
+published version — `feat:` is a minor, `fix:` a patch, `refactor:` releases
+nothing.
 
 ## License
 

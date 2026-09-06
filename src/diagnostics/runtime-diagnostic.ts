@@ -92,6 +92,8 @@ export function getRuntimeDetails(): Record<string, unknown> {
 		processVersions: process?.versions,
 		hasRequest: typeof Request !== "undefined",
 		hasAbortController: typeof AbortController !== "undefined",
-		hasWebSocketPair: typeof WebSocketPair !== "undefined",
+		// WebSocketPair is Workers-only and has no ambient declaration here, so it
+		// is probed through globalThis rather than as a bare identifier.
+		hasWebSocketPair: "WebSocketPair" in g,
 	}
 }

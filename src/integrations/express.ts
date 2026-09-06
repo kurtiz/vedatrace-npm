@@ -59,13 +59,23 @@ export function vedaTraceMiddleware(config: ExpressMiddlewareConfig = {}) {
 		...vedaConfig
 	} = config
 
+	// One logger for the whole app, created when the middleware is built rather
+	// than per request. Each vedatrace() call opens its own batcher, HTTP
+	// transport, flush interval and — in Node — three process listeners, so
+	// building one per request leaked all four: past ten requests Node starts
+	// printing MaxListenersExceededWarning, and the timers never stop.
+	//
+	// The per-request context lives on a child logger, which shares the parent's
+	// batcher and allocates nothing but a metadata object.
+	const baseLogger = vedatrace(vedaConfig)
+
 	return (req: Request, res: Response, next: NextFunction): void => {
 		// Generate request ID
 		const requestId = generateRequestId(req)
 		req.requestId = requestId
 
 		// Create request-scoped logger
-		const logger = vedatrace(vedaConfig).child({
+		const logger = baseLogger.child({
 			requestId,
 			...requestMetadata(req),
 		})
@@ -98,10 +108,9 @@ export function vedaTraceMiddleware(config: ExpressMiddlewareConfig = {}) {
 					durationMs: duration,
 				})
 
-				// Ensure logs are flushed
-				logger.flush().catch(() => {
-					// Silent fail - don't break response
-				})
+				// The shared batcher flushes on its own interval and on shutdown;
+				// forcing a flush per response would send one HTTP request per
+				// request served, which is the opposite of batching.
 			})
 		}
 

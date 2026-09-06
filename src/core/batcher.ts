@@ -7,6 +7,7 @@
  * 3. Batch mode: periodic/batch-size flush for long-running environments
  */
 
+import { isFatal, isRetryable, retryAfterMs } from "./errors"
 import type {
 	BatcherConfig,
 	InternalLogEntry,
@@ -22,6 +23,12 @@ export class VedaTraceBatcher {
 	private pendingFlush: Promise<void> | null = null
 	private context: VedaTraceEdgeContext | undefined
 	private waitUntilFn: ((promise: Promise<unknown>) => void) | undefined
+	/**
+	 * Set when the ingestion endpoint rejects our credentials. Every subsequent
+	 * batch would fail identically, so we stop rather than spend a request (and a
+	 * retry storm) per flush for the life of the process. start() clears it.
+	 */
+	private halted = false
 
 	constructor(
 		private transports: VedaTraceTransport[],
@@ -41,6 +48,8 @@ export class VedaTraceBatcher {
 	}
 
 	add(log: InternalLogEntry): void {
+		if (this.halted) return
+
 		this.queue.push(log)
 
 		if (this.context || this.waitUntilFn) {
@@ -68,24 +77,13 @@ export class VedaTraceBatcher {
 		this.flushQueued = true
 		queueMicrotask(() => {
 			this.flushQueued = false
-			this.flush().catch((error) => {
-				if (this.config.onError) {
-					this.config.onError(
-						error instanceof Error ? error : new Error(String(error)),
-					)
-				} else {
-					console.error(
-						"[VedaTrace] Debounced flush error:",
-						error instanceof Error ? error.message : String(error),
-					)
-				}
-			})
+			this.flush().catch((error) => this.reportError(error))
 		})
 	}
 
 	async flush(): Promise<void> {
 		if (this.isFlushing) {
-			return this.pendingFlush ?? (await Promise.resolve())
+			return this.pendingFlush ?? Promise.resolve()
 		}
 
 		if (this.queue.length === 0) {
@@ -96,10 +94,21 @@ export class VedaTraceBatcher {
 		const logsToSend = [...this.queue]
 		this.queue = []
 
-		const flushPromise = this.sendWithRetry(logsToSend).finally(() => {
-			this.isFlushing = false
-			this.pendingFlush = null
-		})
+		const flushPromise = this.sendWithRetry(logsToSend)
+			.finally(() => {
+				this.isFlushing = false
+				this.pendingFlush = null
+			})
+			// Anything logged while that send was in flight is still sitting in the
+			// queue. Without this drain it waits for the next add() or timer tick —
+			// and in a Worker, where the handler returns right after, those last logs
+			// were simply lost. Chaining keeps them inside the same promise, so the
+			// waitUntil below covers them too.
+			.then(() => {
+				if (this.queue.length > 0 && !this.halted) {
+					return this.flush()
+				}
+			})
 
 		this.pendingFlush = flushPromise
 
@@ -116,36 +125,67 @@ export class VedaTraceBatcher {
 		logs: InternalLogEntry[],
 		attempt = 0,
 	): Promise<void> {
-		const errors: Error[] = []
+		const errors: unknown[] = []
 
 		for (const transport of this.transports) {
 			try {
 				await transport.send(logs)
 			} catch (error) {
-				errors.push(error instanceof Error ? error : new Error(String(error)))
+				errors.push(error)
 			}
 		}
 
-		if (errors.length > 0 && errors.length === this.transports.length) {
-			if (attempt < this.config.maxRetries) {
-				await this.delay(this.config.retryDelay * (attempt + 1))
-				return this.sendWithRetry(logs, attempt + 1)
-			}
-
-			const combinedError = new Error(
-				`Failed to send logs after ${this.config.maxRetries} retries: ${errors.map((e) => e.message).join(", ")}`,
-			)
-
-			if (this.config.onError) {
-				this.config.onError(combinedError)
-			} else {
-				console.error("[VedaTrace]", combinedError.message)
-			}
+		// A partial failure still delivered the logs somewhere; only a total
+		// failure is worth retrying.
+		if (errors.length === 0 || errors.length < this.transports.length) {
+			this.config.onSuccess?.()
 			return
 		}
 
-		if (this.config.onSuccess) {
-			this.config.onSuccess()
+		// Bad key or blocked origin: retrying cannot help, and neither can the
+		// next batch. Say so once and stand down.
+		const fatalError = errors.find(isFatal)
+		if (fatalError) {
+			this.halt(fatalError)
+			return
+		}
+
+		if (errors.some(isRetryable) && attempt < this.config.maxRetries) {
+			// Honour a server-sent Retry-After over our own backoff.
+			const backoff = this.config.retryDelay * (attempt + 1)
+			await this.delay(retryAfterMs(errors) ?? backoff)
+			return this.sendWithRetry(logs, attempt + 1)
+		}
+
+		const detail = errors.map(describeError).join(", ")
+		this.reportError(
+			new Error(
+				errors.some(isRetryable)
+					? `Failed to send ${logs.length} logs after ${this.config.maxRetries} retries: ${detail}`
+					: `Failed to send ${logs.length} logs: ${detail}`,
+			),
+		)
+	}
+
+	/** Stop accepting logs after an unrecoverable authentication failure. */
+	private halt(error: unknown): void {
+		this.halted = true
+		this.queue = []
+		this.stop()
+		this.reportError(
+			new Error(
+				`VedaTrace disabled: ${describeError(error)}. Check your API key and the key's allowed origins, then call logger.start() to resume.`,
+			),
+		)
+	}
+
+	private reportError(error: unknown): void {
+		const normalized = error instanceof Error ? error : new Error(String(error))
+
+		if (this.config.onError) {
+			this.config.onError(normalized)
+		} else {
+			console.error("[VedaTrace]", normalized.message)
 		}
 	}
 
@@ -156,23 +196,12 @@ export class VedaTraceBatcher {
 
 		this.flushTimer = setInterval(() => {
 			if (this.queue.length > 0) {
-				this.flush().catch((error) => {
-					if (this.config.onError) {
-						this.config.onError(
-							error instanceof Error ? error : new Error(String(error)),
-						)
-					} else {
-						console.error(
-							"[VedaTrace] Flush error:",
-							error instanceof Error ? error.message : String(error),
-						)
-					}
-				})
+				this.flush().catch((error) => this.reportError(error))
 			}
 		}, this.config.flushInterval)
 
 		if (this.config.unrefTimer === true) {
-			this.flushTimer.unref()
+			this.flushTimer.unref?.()
 		}
 	}
 
@@ -185,6 +214,8 @@ export class VedaTraceBatcher {
 	}
 
 	start(): void {
+		this.halted = false
+
 		if (!this.flushTimer && !this.immediateFlush) {
 			this.startFlushTimer()
 		}
@@ -198,7 +229,16 @@ export class VedaTraceBatcher {
 		return this.queue.length
 	}
 
+	/** True once an auth failure has shut the batcher down. */
+	isHalted(): boolean {
+		return this.halted
+	}
+
 	setExecutionContext(ctx: VedaTraceEdgeContext): void {
 		this.context = ctx
 	}
+}
+
+function describeError(error: unknown): string {
+	return error instanceof Error ? error.message : String(error)
 }

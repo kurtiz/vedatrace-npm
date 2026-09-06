@@ -25,6 +25,7 @@
  */
 
 export { VedaTraceBatcher } from "@/core/batcher"
+export { VedaTraceTransportError } from "@/core/errors"
 
 export { VedaTraceLogger } from "@/core/logger"
 export type {
@@ -59,6 +60,7 @@ export {
 	isLongRunning,
 	isServerless,
 } from "@/utils/runtime"
+export { SDK_VERSION } from "@/version"
 
 import { VedaTraceBatcher } from "@/core/batcher"
 import { VedaTraceLogger } from "@/core/logger"
@@ -76,6 +78,28 @@ import {
 	isLongRunning,
 	isServerless,
 } from "@/utils/runtime"
+
+/**
+ * Read the API key from the environment when the caller did not pass one.
+ *
+ * Guarded on every access: `process` is undefined in browsers and in Workers
+ * without nodejs_compat, and touching it bare there throws a ReferenceError
+ * before any of the caller's code runs.
+ */
+function resolveApiKey(config: VedaTraceConfig): string | undefined {
+	if (config.apiKey) return config.apiKey
+
+	try {
+		if (typeof process !== "undefined" && process.env) {
+			return process.env.VEDATRACE_API_KEY || undefined
+		}
+	} catch {
+		// Some sandboxed runtimes throw on property access rather than returning
+		// undefined. An unset key is not an error — the logger just stays inert.
+	}
+
+	return undefined
+}
 
 /** Runtime-specific flush interval defaults */
 const RUNTIME_FLUSH_INTERVALS: Record<string, number> = {
@@ -99,10 +123,11 @@ export function vedatrace(
 	config: VedaTraceConfig = {},
 ): VedaTraceLoggerInterface {
 	const runtime = detectRuntime()
-	const logger = new VedaTraceLogger(config)
+	const apiKey = resolveApiKey(config)
+	const logger = new VedaTraceLogger(apiKey ? { ...config, apiKey } : config)
 
 	// Only set up transports if apiKey is provided without custom transports
-	if (config.apiKey && (!config.transports || config.transports.length === 0)) {
+	if (apiKey && (!config.transports || config.transports.length === 0)) {
 		const isBrowserEnv = isBrowser()
 		const isServerlessEnv = isServerless()
 		const isLongRunningEnv = isLongRunning()
@@ -113,7 +138,7 @@ export function vedatrace(
 			: VedaTraceHttpTransport
 
 		const httpConfig: HttpTransportConfig = {
-			apiKey: config.apiKey,
+			apiKey,
 			keepalive: isBrowserEnv || isServerlessEnv,
 		}
 		if (config.endpoint) httpConfig.endpoint = config.endpoint

@@ -46,9 +46,15 @@ export function withVedaTrace<
 		...vedaConfig
 	} = config
 
+	// Built once per wrapped route, not once per request. See the note in the
+	// Express middleware: every vedatrace() call opens its own batcher, timer and
+	// process listeners, so calling it inside the handler leaked one set per
+	// request. child() shares the parent's batcher.
+	const baseLogger = vedatrace(vedaConfig)
+
 	return async (req: Request): Promise<Response> => {
 		const requestId = generateRequestId()
-		const logger = vedatrace(vedaConfig).child({
+		const logger = baseLogger.child({
 			requestId,
 			...requestMetadata(),
 		})
@@ -108,8 +114,13 @@ export function createVedaTraceLogger(
 }
 
 /**
- * Server-side logger for Next.js
- * Use in Server Components or API routes
+ * Shared server-side logger for Next.js.
+ *
+ * Reads `VEDATRACE_API_KEY` from the environment. Built on first use rather than
+ * at import time: the previous module-level instance was constructed with no API
+ * key, which left it without a transport, so every call on it was silently
+ * dropped — and it ran its runtime detection and process-handler setup just for
+ * importing the module, including in the browser bundle.
  *
  * @example
  * ```typescript
@@ -122,6 +133,40 @@ export function createVedaTraceLogger(
  * }
  * ```
  */
-export const serverLogger = vedatrace({
-	service: "nextjs-server",
-})
+let serverLoggerInstance: VedaTraceLoggerInterface | null = null
+
+/** Get (and lazily create) the shared Next.js server logger. */
+export function getServerLogger(
+	config: VedaTraceConfig = {},
+): VedaTraceLoggerInterface {
+	if (!serverLoggerInstance) {
+		serverLoggerInstance = vedatrace({ service: "nextjs-server", ...config })
+	}
+	return serverLoggerInstance
+}
+
+/**
+ * Convenience wrapper around {@link getServerLogger} that keeps the original
+ * `serverLogger.info(...)` call shape while deferring construction to the first
+ * call.
+ */
+export const serverLogger: VedaTraceLoggerInterface = {
+	debug: (message, metadata) => getServerLogger().debug(message, metadata),
+	info: (message, metadata) => getServerLogger().info(message, metadata),
+	warn: (message, metadata) => getServerLogger().warn(message, metadata),
+	error: (message, metadata) => getServerLogger().error(message, metadata),
+	fatal: (message, metadata) => getServerLogger().fatal(message, metadata),
+	child: (defaults) => getServerLogger().child(defaults),
+	flush: () => getServerLogger().flush(),
+	stop: () => getServerLogger().stop(),
+	start: () => getServerLogger().start(),
+	withContext(ctx) {
+		getServerLogger().withContext(ctx)
+		return this
+	},
+	hasContext: () => getServerLogger().hasContext(),
+	getContext: () => getServerLogger().getContext(),
+	get runtime() {
+		return getServerLogger().runtime
+	},
+}
