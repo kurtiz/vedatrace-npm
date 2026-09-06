@@ -5,14 +5,16 @@
 	"scripts": {
 		"setup": "rm -rf node_modules && npm i && git init && husky",
 		"prepublishOnly": "npm run build",
-		"build": "pkgroll --clean-dist",
+		"build": "node scripts/sync-version.mjs && pkgroll --clean-dist",
 		"test": "vitest --run",
 		"lint": "bunx @biomejs/biome check --write",
-		"changeset": "changeset",
-		"version": "changeset version",
-		"release": "bun run build && changeset publish",
-		"ci:version": "changeset version",
-		"ci:publish": "bun run build && changeset publish --provenance"
+		"release": "node scripts/tegami.mts",
+		"typecheck": "tsc --noEmit -p tsconfig.json",
+		"lint:ci": "bunx @biomejs/biome ci .",
+		"smoke": "node scripts/smoke-test.mjs",
+		"release:version": "node scripts/tegami.mts version",
+		"release:publish": "node scripts/tegami.mts publish",
+		"release:check": "node scripts/tegami.mts check-publish"
 	},
 	"publishConfig": {
 		"provenance": true,
@@ -95,49 +97,56 @@
 	],
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.14",
-		"@changesets/cli": "^2.29.8",
+		"@types/express": "^5.0.6",
+		"@types/react": "^19.2.13",
 		"@vitest/coverage-v8": "^4.0.18",
 		"execa": "^9.6.1",
+		"express": "^5.1.0",
 		"husky": "^9.1.7",
 		"lint-staged": "^16.2.7",
 		"pkgroll": "^2.23.0",
 		"react": "^19.2.4",
+		"tegami": "^1.5.0",
 		"tsup": "^8.5.1",
 		"tsx": "^4.21.0",
 		"typescript": "^5.9.3",
 		"vitest": "^4.0.18"
 	},
 	"peerDependencies": {
-		"express": "latest",
-		"react": ">=16.8.0",
 		"@types/express": "^5.0.6",
-		"@types/react": "^19.2.13"
+		"@types/react": "^19.2.13",
+		"express": ">=4",
+		"react": ">=16.8.0"
 	},
 	"peerDependenciesMeta": {
-		"react": {
-			"optional": true
-		},
-		"express": {
-			"optional": true
-		},
 		"@types/express": {
 			"optional": true
 		},
 		"@types/react": {
 			"optional": true
+		},
+		"express": {
+			"optional": true
+		},
+		"react": {
+			"optional": true
 		}
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/kurtiz/vedatrace-npm.git"
+		"url": "git+https://github.com/VedaTrace/vedatrace-npm.git"
 	},
 	"bugs": {
-		"url": "https://github.com/kurtiz/vedatrace-npm/issues"
+		"url": "https://github.com/VedaTrace/vedatrace-npm/issues"
 	},
 	"author": {
 		"name": "Aaron Will Djaba",
 		"email": "aaronwilldjaba@outlook.com",
 		"url": "https://iamaaronwilldjaba.me"
 	},
-	"license": "MIT"
+	"license": "MIT",
+	"sideEffects": false,
+	"engines": {
+		"node": ">=18"
+	}
 }

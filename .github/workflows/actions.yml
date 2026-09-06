@@ -1,24 +1,83 @@
 name: CI
+
+# Previously this ran on `pull_request` AND on every push to a non-release
+# branch, so an open PR built each commit twice. PRs are the gate; pushes to the
+# release branches are covered because the Release workflow verifies before it
+# publishes.
 on:
   pull_request:
+  push:
     branches:
       - main
       - beta
       - alpha
-  push:
-    branches-ignore:
-      - main
-      - beta
-      - alpha
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build_test:
+  verify:
+    name: Lint, typecheck, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
-      - run: bun run lint
-      - run: bun run test
+
+      # --frozen-lockfile: a PR that changes package.json without committing the
+      # updated lockfile now fails here instead of silently resolving different
+      # versions in CI than everyone gets locally.
+      - run: bun install --frozen-lockfile
+
+      # `biome ci` checks. The `lint` script uses `--write`, which fixes and then
+      # exits 0 — as a CI step it could never fail.
+      - name: Lint
+        run: bun run lint:ci
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+      - name: Build
+        run: bun run build
+
+  package:
+    name: Package validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: bun install --frozen-lockfile
       - run: bun run build
+
+      # Catches malformed exports maps, missing files, bad main/module/types
+      # fields — the class of bug unit tests cannot see because they import from
+      # src/ through a path alias.
+      - name: publint
+        run: bunx publint@latest
+
+      # Verifies the shipped .d.ts files actually resolve for CJS and ESM
+      # consumers. node10 is ignored deliberately: this package requires Node 18+.
+      - name: Are the types wrong?
+        run: bunx @arethetypeswrong/cli@latest --pack . --profile node16
+
+      # Installs the real tarball into a clean directory and imports every
+      # subpath from both ESM and CJS.
+      - name: Smoke test the tarball
+        run: bun run smoke
