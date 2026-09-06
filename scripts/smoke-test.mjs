@@ -9,7 +9,7 @@
  * module 'vedatrace/next'" the moment they install it.
  */
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -21,8 +21,17 @@ const run = (cmd, args, cwd) =>
 	execFileSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] })
 
 try {
-	const packed = JSON.parse(run("npm", ["pack", "--json", "--pack-destination", dir], root))
-	const tarball = join(dir, packed[0].filename)
+	// Find the tarball on disk rather than parsing `npm pack --json`. That
+	// output is not stable across npm majors — 11 returns an array of packed
+	// entries, 12 returns an object keyed by package name — and this job runs
+	// `npm install -g npm@latest`, so it moves under us. The directory holds
+	// exactly one tarball either way.
+	run("npm", ["pack", "--pack-destination", dir], root)
+	const packed = readdirSync(dir).filter((f) => f.endsWith(".tgz"))
+	if (packed.length !== 1) {
+		throw new Error(`Expected exactly one packed tarball, found ${packed.length}: ${packed.join(", ")}`)
+	}
+	const tarball = join(dir, packed[0])
 
 	writeFileSync(join(dir, "package.json"), JSON.stringify({ name: "smoke", private: true }))
 	run("npm", ["install", "--no-audit", "--no-fund", tarball], dir)

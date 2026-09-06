@@ -6,12 +6,17 @@ name: Release
 #     -> no publish owed  -> `tegami version` bumps, writes .tegami/publish-lock.yaml,
 #                            and opens the version PR (auto-merged below)
 #   version PR merges
-#     -> publish owed     -> `tegami publish` ships to npm, tags, and cuts the release
+#     -> publish owed     -> the publish job ships to npm, tags, and cuts the release
 #
 # `tegami ci` collapses both into one command, but it versions with the
 # publish-lock check disabled — which, with commit-derived changelogs, lets the
 # post-merge run version a second time instead of publishing. The explicit
 # check-publish branch below keeps that guard on.
+#
+# The two are separate jobs so the `release` environment — and any required
+# reviewers on it — gates only the publish. Publishing is the one irreversible
+# step here; versioning and opening a PR are both revertable, and putting them
+# behind an approval would mean two manual approvals per release.
 
 on:
   push:
@@ -22,17 +27,15 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
-permissions:
-  contents: write
-  pull-requests: write
-  id-token: write
-
 jobs:
-  release:
-    name: Release
+  version:
+    name: Verify and version
     runs-on: ubuntu-latest
-    # Must match the environment name in your npm Trusted Publisher settings.
-    environment: release
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      publish: ${{ steps.state.outputs.publish }}
     env:
       # The `secrets` context is not available in a step-level `if`. Referencing
       # it there is a workflow syntax error rather than a falsy condition, and it
@@ -72,22 +75,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          # Tegami requires Node 24+. Trusted publishing needs >= 22.14.0, so 24
-          # satisfies both. No registry-url: an .npmrc with a token would make npm
-          # authenticate with that token instead of the OIDC exchange.
+          # Tegami requires Node 24+.
           node-version: '24'
-
-      # setup-node ships the npm bundled with Node; trusted publishing needs
-      # npm >= 11.5.1. Without this the publish falls back to token auth — and
-      # there is no token — so it fails at the last step.
-      - name: Upgrade npm for trusted publishing
-        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: bun install --frozen-lockfile
 
-      # Runs before either branch below, so a version PR is never opened from a
-      # broken tree and a publish never ships one.
+      # Runs before either outcome, so a version PR is never opened from a broken
+      # tree and the publish job never starts from one.
       - name: Verify
         run: |
           bun run lint:ci
@@ -106,12 +101,6 @@ jobs:
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Publish to npm
-        if: steps.state.outputs.publish == 'true'
-        run: bun run release:publish
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Version packages
         if: steps.state.outputs.publish == 'false'
@@ -138,3 +127,52 @@ jobs:
           # --auto waits for required checks when the repo has them; it errors if
           # auto-merge is disabled in repo settings, in which case merge outright.
           gh pr merge "$pr" --squash --auto || gh pr merge "$pr" --squash
+
+  publish:
+    name: Publish to npm
+    needs: version
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    # Must match the environment name in the npm Trusted Publisher entry. Any
+    # required reviewers on this environment pause the run here, before anything
+    # reaches the registry.
+    environment: release
+    permissions:
+      contents: write
+      # Authenticates to npm by OIDC. There is no NPM_TOKEN.
+      id-token: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Trusted publishing needs Node >= 22.14.0; Tegami needs 24+. No
+          # registry-url: an .npmrc with a token would make npm authenticate with
+          # that token instead of the OIDC exchange.
+          node-version: '24'
+
+      # setup-node ships the npm bundled with Node; trusted publishing needs
+      # npm >= 11.5.1. Without this the publish falls back to token auth — and
+      # there is no token — so it fails at the last step.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Publish
+        run: bun run release:publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

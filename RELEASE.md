@@ -35,9 +35,15 @@ from `.claude/skills/conventional-commits/`.
    `CHANGELOG.md`, writes `.tegami/publish-lock.yaml`, and opens a
    **Version Packages** PR.
 3. That PR is auto-merged.
-4. The merge lands on `main`, the workflow runs again, sees a publish is owed,
-   and ships to npm with provenance — then tags the commit and cuts a GitHub
-   release.
+4. The merge lands on `main`, the workflow runs again and sees a publish is
+   owed. The publish job targets the `release` environment, which has a required
+   reviewer — so it pauses for approval, then ships to npm with provenance, tags
+   the commit and cuts a GitHub release.
+
+Only step 4 asks for a human. Publishing is the single irreversible action in
+the chain; versioning and opening a PR are both revertable, which is why they
+sit in a separate job outside the environment. Approve from the run page, or
+from the Actions tab — GitHub also emails the reviewer.
 
 The publish lock is committed before anything is published, so a failed publish
 can be retried by re-running the job rather than re-versioning.
