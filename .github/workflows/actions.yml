@@ -49,6 +49,16 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Workflow files are not covered by any other check here, and a bad
+      # expression is a startup failure: the file fails to parse, so even its
+      # `on:` filters stop applying and the run fires on branches it excludes.
+      # actionlint catches those statically — including `secrets` used in a
+      # step-level `if`, which is not allowed and has bitten this repo once.
+      - name: Lint workflows
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
+
   package:
     name: Package validation
     runs-on: ubuntu-latest

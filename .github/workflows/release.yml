@@ -33,6 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     # Must match the environment name in your npm Trusted Publisher settings.
     environment: release
+    env:
+      # The `secrets` context is not available in a step-level `if`. Referencing
+      # it there is a workflow syntax error rather than a falsy condition, and it
+      # fails the whole file at startup — including the branch filters, so the
+      # run fires on branches `on:` excludes. Job-level `env` may read secrets and
+      # step-level `if` may read `env`, so the guard goes through here.
+      RELEASE_APP_CLIENT_ID: ${{ secrets.RELEASE_APP_CLIENT_ID }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v6
@@ -51,7 +58,7 @@ jobs:
       # github.token and the release still runs, just needing a nudge to publish.
       - name: Mint a GitHub App token
         id: app-token
-        if: ${{ secrets.RELEASE_APP_CLIENT_ID != '' }}
+        if: env.RELEASE_APP_CLIENT_ID != ''
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
